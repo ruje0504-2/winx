@@ -100,7 +100,8 @@ it, preserves an already-ready cold-start host, and retains the bounded
 1.0.0.18 chip recovery. Failed host preparation does not issue HCI or firmware
 commands. Repeated context-loss, clock/reset failure, interrupt and D0 cleanup
 tests pass, as do ARM64 compilation and SYS/catalog checks. Version 1.0.0.19
-is now installed with SD 0.5.0.3; physical boot/discovery remain unverified.
+is now installed with SD 0.5.0.3. The owner confirmed desktop boot and
+working Bluetooth; this does not establish SC7 sleep/wake.
 [Switchroot UART initialization](https://github.com/CTCaer/switch-l4t-kernel-4.9/blob/2d0059fd3167a8df756de2aa0489d4aa70a9fc15/drivers/tty/serial/serial-tegra.c#L1108)
 
 SD 0.5.0.2 snapshots the active CAR source/base clock and restores SDMMC1's
