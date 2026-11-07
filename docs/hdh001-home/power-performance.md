@@ -10,6 +10,10 @@ The normal build now disables those pulses and uses **native PMC reset for Resta
 
 ## Current sleep/wake work
 
+Development is paused after the current clock/pad and paired-driver modules
+were preserved on `sc7-test`. See the [handoff and remaining gaps](PORTING.md).
+No complete physical SC7 sleep/wake cycle has passed.
+
 The goal is **retained-memory sleep and direct power-button wake without
 Hekate**. Tegra SC7 is a platform sleep state, not an ACPI "S7" state. Normal
 shutdown, display-off and CPU idle are not acceptance of whole-system sleep.

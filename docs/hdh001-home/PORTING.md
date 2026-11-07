@@ -5,6 +5,16 @@ tracks the driver repository's `sc7-test` branch. The default branches do not
 include this experimental platform sleep, PMIC wake or input-idle code.
 SC7 has not passed a complete physical sleep/wake cycle.
 
+**SC7 development is paused at the owner's request.** The current module
+handoff preserves BL31 patches 0005–0007 (BPMP/PMC entry, CAR/PLL context,
+GPIO/pinmux context) and the matching GPIO/I2C/power-button/input/PEP source.
+ARM64 builds and focused host tests passed for those completed components;
+the default BL31 binary remained unchanged. The platform candidate is not
+installed or hardware accepted. Complete Windows coordination, display/DSI
+and PHY/pad-voltage restoration remain unfinished; resume only when requested.
+The independent SD 0.5.0.3 interrupt-mask recovery fix is included through the
+submodule, alongside Bluetooth 1.0.0.19. This does not establish an SC7 result.
+
 The goal is a usable Windows 11 ARM64 system on Switch Lite HDH-001:
 adapt the applicable upstream drivers and add Wi-Fi using Switchroot's Linux
 implementation and board descriptions as hardware references. A successful
