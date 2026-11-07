@@ -1,5 +1,10 @@
 # HDH-001 driver porting goal
 
+This is the isolated `sc7-test` branch. Its paired WindowsDrivers submodule
+tracks the driver repository's `sc7-test` branch. The default branches do not
+include this experimental platform sleep, PMIC wake or input-idle code.
+SC7 has not passed a complete physical sleep/wake cycle.
+
 The goal is a usable Windows 11 ARM64 system on Switch Lite HDH-001:
 adapt the applicable upstream drivers and add Wi-Fi using Switchroot's Linux
 implementation and board descriptions as hardware references. A successful
