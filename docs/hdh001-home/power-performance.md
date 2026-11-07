@@ -99,8 +99,8 @@ UART after D0 context loss. It checks the shared PLLP parent without retuning
 it, preserves an already-ready cold-start host, and retains the bounded
 1.0.0.18 chip recovery. Failed host preparation does not issue HCI or firmware
 commands. Repeated context-loss, clock/reset failure, interrupt and D0 cleanup
-tests pass, as do ARM64 compilation and SYS/catalog checks. It is not installed;
-1.0.0.18 remains the deployed Bluetooth version.
+tests pass, as do ARM64 compilation and SYS/catalog checks. Version 1.0.0.19
+is now installed with SD 0.5.0.3; physical boot/discovery remain unverified.
 [Switchroot UART initialization](https://github.com/CTCaer/switch-l4t-kernel-4.9/blob/2d0059fd3167a8df756de2aa0489d4aa70a9fc15/drivers/tty/serial/serial-tegra.c#L1108)
 
 SD 0.5.0.2 snapshots the active CAR source/base clock and restores SDMMC1's
@@ -109,8 +109,8 @@ source and /2 divider before any card clock pulse, instead of briefly using
 the SDR104 source first. Repeated register-loss tests cover SDR104/DDR200,
 clock-off snapshots, stuck gates/reset, PLL/source/clock failures and old-I/O
 non-replay. Both ARM64 partition-profile builds and signed visible-package
-checks pass. It is not installed;
-the card retains 0.5.0.1. It depends on the new SC7 global-clock restore;
+checks pass. These device-level changes are included in the installed
+0.5.0.3 recovery candidate. A future full SC7 resume also requires global-clock restoration;
 pad/power retention and actual card power-loss recovery remain separate requirements.
 
 ### Switchroot Ubuntu reference

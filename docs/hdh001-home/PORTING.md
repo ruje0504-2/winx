@@ -14,6 +14,10 @@ installed or hardware accepted. Complete Windows coordination, display/DSI
 and PHY/pad-voltage restoration remain unfinished; resume only when requested.
 The independent SD 0.5.0.3 interrupt-mask recovery fix is included through the
 submodule, alongside Bluetooth 1.0.0.19. This does not establish an SC7 result.
+Both independent packages were subsequently installed and readback-verified.
+The earlier 0.5.0.1 combination failed with INACCESSIBLE_BOOT_DEVICE. The new
+candidate's physical desktop boot and Bluetooth discovery remain unverified;
+no experimental SC7 platform firmware was installed during this servicing.
 
 The goal is a usable Windows 11 ARM64 system on Switch Lite HDH-001:
 adapt the applicable upstream drivers and add Wi-Fi using Switchroot's Linux
@@ -103,21 +107,23 @@ configuration, removes D0 self-test traffic and moves error diagnostics out
 of the SD/PMIC gate. Six-route context-loss/failure tests pass; not installed.
 Bluetooth 1.0.0.19 is the latest signed candidate. It restores UART-D's own
 clock/reset before a resumed HCI probe, preserving the 1.0.0.18 recovery path.
-Repeated context-loss and failure tests pass; 1.0.0.18 is still installed.
+Repeated context-loss and failure tests pass; 1.0.0.19 is now installed with
+SD 0.5.0.3 and awaits physical boot/discovery results.
 SD 0.5.0.2 restores the saved SDR104/DDR200 source before the first card clock
 pulse, and restores SDMMC1's CAR enable/reset before accessing a lost host.
-Both profile builds and context-loss/failure tests pass; 0.5.0.1 stays installed.
+Both profile builds and context-loss/failure tests pass. These changes are
+included in the installed 0.5.0.3 recovery candidate, without an SC7 claim.
 
 | Area | Evidence / current gap | Acceptance |
 |---|---|---|
-| SD / boot | The latest owner comparison found similar responsiveness with FAT32 visible or hidden. The card now has the visible 0.5.0.1 candidate and the same paired BL33. | No proven performance difference, cause or fix. Further investigation deferred; both profiles remain available. |
-| SD DDR200 | Signed visible 0.5.0.1 is installed and readback-verified: automatic detection, eight-tap-minimum tuning and SDR104 fallback. Candidate 0.5.0.2 corrects retained-power resume clock ordering; both profile builds and fault tests pass, not installed. | Physical activation, read integrity and fallback remain pending; sustained throughput is unmeasured. Sleep/wake acceptance depends on later SC7 work. |
+| SD / boot | The previous 0.5.0.1 + Bluetooth 1.0.0.18 combination failed with INACCESSIBLE_BOOT_DEVICE. Signed visible 0.5.0.3 + Bluetooth 1.0.0.19 is now installed; BL33 and the partition layout were retained. | Restore desktop boot and identify the failing storage operation; no cause is proven yet. |
+| SD DDR200 | Signed visible 0.5.0.3 is installed and readback-verified. It retains automatic detection, eight-tap-minimum tuning, SDR104 fallback and corrected clock ordering; it restores the event masks lost during private fallback reset. | The previous combination failed to boot; the replacement awaits a physical boot test. Activation, read integrity and fallback remain unverified; sustained throughput is unmeasured. |
 | GPIO / I2C / touch | Shared controllers loaded; Lite touch clicks work. GPIO 1.0.0.5 and I2C 1.0.0.6 add power-transition context restoration; built, signed and host-tested, not installed. | Touch press/release and three-point check, without stuck contacts; controller restoration needs physical acceptance. |
 | CPU / fan / EMC | CPU 1996.8 MHz; fan turns; RAM 1866 MHz after BPMP rounding | Readback and thermal behavior; 2100 MHz remains a separate unmet target |
 | Backlight / wake | Brightness and one screen-off fan cycle passed. Repeated cycles can freeze the lock screen or leave a black screen with cursor. Fan 1.0.0.7 removes synchronous registry writes from the display notification lock. | Repeated display-off/on and unlock without stalls; pending physical test. |
 | Audio | Owner confirmed audible output after the pad/1.0.0.9 update; headphones and jack switching remain untested | Audible stereo speakers, headphones and jack switching; no added boot test tone |
 | Battery / RTC / buttons | Before the combined update, the Lite reported battery capacity, voltage and changing power state. The RTC read succeeded and restored system time from its saved offset. The power-button driver recorded a press and a submitted HID report. | Confirm volume-button input and observe charging transitions with the new Lite PD profile. |
-| Bluetooth | Installed 1.0.0.18 removes the sticky BootPending gate and adds one T214 PH4 reset/full-probe retry. Latest signed candidate 1.0.0.19 also restores UART-D clock/reset after D0 context loss; host tests pass, not installed. | Verify discovery, repeated startup and shutdown on the replacement; complete sleep/resume acceptance separately. |
+| Bluetooth | Installed 1.0.0.19 retains the bounded PH4 reset/full-probe retry and prepares UART-D before HCI access. Host tests, signatures and readback pass; physical discovery remains pending. | Verify discovery, repeated startup and shutdown on the replacement; complete sleep/resume acceptance separately. |
 | USB-C host | ARM64 host firmware and signed mailbox/PD packages deployed to the card. Switchroot Ubuntu enumerated both root hubs on this Lite. Windows hardware test pending. | Enumerate a peripheral through USB-C in Windows. |
 | Built-in controls / motion | Windows enumerated the HID gamepad and mouse and received SIO input. Version 0.2.3 provides Capture, Plus, right-stick scrolling, middle click and D-pad keyboard arrows. Candidate 0.2.4 retains those mappings and adds display-driven runtime idle. | Confirm desktop navigation, in-game controls and motion on the Lite. [Mapping](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/SwitchSensor/README.md) |
 | Wi-Fi | SwitchWifi 0.5.5 automatically reconnected to WPA2-Personal, obtained a DHCP lease and default gateway, and reached the Internet on trimmed Pro. | Measure sustained traffic and group rekey. |
