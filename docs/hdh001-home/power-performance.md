@@ -25,13 +25,18 @@ driver branch; S4 remains removed. Normal shutdown and native restart retain
 their separate accepted results above.
 
 Bluetooth 1.0.0.19 retains bounded patch/reset recovery and UART-D host
-preparation. SD 0.5.0.3 retains DDR200 development and corrects clock ordering
+preparation. The historical SD 0.5.0.3 update retained DDR200 development and corrected clock ordering
 when the card keeps power. These ordinary device-recovery changes remain in
 the default branch and do not require the experimental PEP. Their builds,
 focused tests and package signatures passed. SD 0.5.0.3 additionally fixes
-event-mask loss during private SDR104 fallback; it and Bluetooth 1.0.0.19
-are installed/readback-verified. The owner confirmed desktop boot and
-working Bluetooth; actual DDR200 selection/fallback remain unverified.
+event-mask loss during private SDR104 fallback. The owner confirmed desktop
+boot and working Bluetooth on that combination. The current SD version is
+**0.5.1.1**, verified after a planned restart on November 13 UTC with an
+8 MiB write/flush/readback check. It advertises capability but records a
+one-tap window after 128 DDR200 samples, then successful SDR104 fallback.
+Crash-dump takeover support does not enable S4. The full power-settings
+snapshot was unchanged, CPU remained **1996.8 MHz**, and fan version **12**
+remained active. These storage checks do not add sleep/wake acceptance.
 The earlier Bluetooth 1.0.0.18 + DDR200 0.5.0.1 combination failed with
 INACCESSIBLE_BOOT_DEVICE. The owner supplied the stop-code photograph; no
 current crash dump or driver diagnostics survived on the returned card.

@@ -20,16 +20,32 @@ known. The 0.5.0.3 update below restored desktop boot. Actual DDR200 activation
 and physical fallback still need runtime evidence; the stop code alone did
 not establish the failing operation.
 
-The new **SD 0.5.0.3 + Bluetooth 1.0.0.19** candidates are now installed.
+The November 7 **SD 0.5.0.3 + Bluetooth 1.0.0.19** update restored boot.
 The SD change fixes a reproduced defect: private reset-all during DDR200
 fallback cleared SDPORT's interrupt masks without restoring them. The focused
 regression failed before the fix and passed after it in both partition views.
 ARM64 builds, signatures and installed SYS/INF/CAT readbacks passed. Existing
 boot/firmware files, other drivers, service start settings and Bluetooth pairing
 state were retained. The owner subsequently confirmed **desktop boot and working Bluetooth**.
-Actual DDR200 selection and fallback remain unverified until runtime parameters
-are read. The observed boot recovery does not prove which failed operation
-triggered the earlier blue screen.
+Later runtime records are described below. The observed boot recovery does
+not prove which failed operation triggered the earlier blue screen.
+
+The November 12/13 follow-up found a bound SD INF still labelled **0.4.0.1**,
+but a different active SYS containing DDR200 code. Both files were backed up
+separately. The driver recorded `Ddr200Fallbacks=1`, `Ddr200Window=1`,
+`Ddr200Status=0xc0000185` and successful SDR104 recovery. The later capability
+cache was empty; that does not establish that the card never advertised DDR200.
+The **0.5.1.1** update adds crash-dump takeover from SDR104/DDR200 and retains
+capability, tuning sample count and timeout evidence across fallback.
+The signed package passed native Inf2Cat checks and installation returned
+3010 (reboot required). After the planned restart, **0.5.1.1 / oem89.inf /
+Code 0** and its exact SYS hash were verified at 00:54 UTC. An 8 MiB
+write/flush/readback passed. The new record confirms advertised DDR200
+capability, **128 samples / 1 timeout / 1-tap window**, followed by successful
+SDR104 recovery. Thus the scan was not cut short after one sample; the narrow
+window's hardware/configuration cause remains unproven. No new volmgr event
+was found by 00:55 UTC, but actual dump capture has not been tested.
+[Current storage evidence](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/Tegra210Sdhc/README.md#ddr200-fallback-evidence-0511)
 
 FAT32 remains visible. The latest comparison found no clear responsiveness
 difference between views; both profiles remain available and performance
@@ -43,7 +59,8 @@ The default branches exclude the experimental BL31 context patches, sleep/wake
 ACPI flags, processor PEP and input runtime-idle changes. Detailed sleep work
 remains in that branch's existing power notes. SC7 is not an ACPI "S7" state
 and has not passed a complete physical sleep/wake cycle. S4 stays cancelled;
-its ACPI object, storage path, setup and header probe remain removed.
+its ACPI object, setup and header probe remain removed. The new SD crash-dump
+path does not enable Windows hibernation or establish S4 resume support.
 
 On 2026-11-08, the owner confirmed that **switchpwrbtn 1.0.0.4** restores the display and normal input after repeated short power-button screen-off/wake cycles. Runtime counters recorded **12 Power Down reports and 12 Wake Up reports**; Windows recorded paired Modern Standby entry/exit events and SSH remained reachable after wake.
 This is the tested **S0 Modern Standby screen-off/wake** path. It is not SC7 deep sleep or S4 hibernation. Long-duration idle and the Windows sleep-menu entry path are not established by this short-button test.
@@ -52,18 +69,19 @@ The tested [1.0.0.4 source](https://github.com/ruje0504-2/Windows-for-Switch-Dri
 
 | Area | Evidence / current gap | Acceptance |
 |---|---|---|
-| SD / boot | The previous 0.5.0.1 + Bluetooth 1.0.0.18 combination failed with INACCESSIBLE_BOOT_DEVICE. Signed visible 0.5.0.3 + Bluetooth 1.0.0.19 is now installed; BL33 and the partition layout were retained. | Desktop boot passed on 0.5.0.3. The exact earlier failing operation was not captured. |
-| SD DDR200 | Signed visible 0.5.0.3 is installed and readback-verified. It retains automatic detection, eight-tap-minimum tuning, SDR104 fallback and corrected clock ordering; it restores the event masks lost during private fallback reset. | Desktop boot passed on the replacement. Actual DDR200 activation and physical fallback remain unverified; sustained throughput is unmeasured. |
-| GPIO / I2C / touch | Shared controllers loaded and Lite touch clicks work. The default branch retains the pre-sleep GPIO/I2C/touch implementations; experimental context restoration is isolated on sc7-test. | Touch press/release and three-point check without stuck contacts. |
-| CPU / fan / EMC | CPU 1996.8 MHz; fan turns; RAM 1866 MHz after BPMP rounding | Readback and thermal behavior; 2100 MHz remains a separate unmet target |
-| Backlight / S0 wake | Brightness works. With switchpwrbtn **1.0.0.4**, the owner confirmed repeated power-button screen-off/wake with normal display and input; counters show 12 power and 12 wake reports. | Repeated short-button cycles passed. Long-duration idle and sleep-menu entry remain separate tests; SC7 is not implemented. |
+| SD / boot | Signed FAT32-visible **0.5.1.1 / oem89.inf / Code 0**, active SYS hash and a planned boot were verified. Existing BL33 and partition extents were retained; Bluetooth remains 1.0.0.19. | 8 MiB write/flush/readback passed. This is storage validation, not a new GPU desktop acceptance. |
+| SD DDR200 | Capability advertised; 128 samples, 1 timeout, longest window 1 tap. The driver rejected the window below 8 taps and recovered to **SDR104 / 199.68 MHz**. | Fallback and subsequent storage operation observed. Active DDR200, the narrow-window cause and sustained throughput remain unverified. |
+| SD crash dumps | **0.5.1.1** contains bounded PIO takeover from SDR104/DDR200 and card/partition identity checks. No new volmgr event was found in this boot through 00:55 UTC; the 512 MiB pagefile remains. | No actual crash dump has been generated; absence of initialization errors is not dump-capture acceptance. |
+| GPIO / I2C / touch | Installed GPIO **1.0.0.4**, I2C **1.0.0.5**, Lite touch **1.0.1.2**. Default touch source remains 1.0.1.0; experimental context restoration is isolated on sc7-test. | Earlier touch clicks passed. The newer package inventory is not a fresh press/release or three-point test. |
+| CPU / fan / EMC | CPU **1996.8 MHz**, SwitchFan **1.0.0.12**. Curve: 32% at 35 C, 75% at 40 C, 100% at 45 C. Earlier RAM readback was 1866 MHz after BPMP rounding. | Version/hash and clock readback verified; a full physical thermal sweep and 2100 MHz RAM remain unverified. |
+| Backlight / S0 wake | Installed switchpwrbtn **1.0.0.6**; default source and owner-confirmed short-button wake result remain **1.0.0.4**, with 12 power and 12 wake reports. | Earlier repeated short-button cycles passed. This does not validate the newer 1.0.0.6 package or long-duration idle; SC7 is not implemented. |
 | Audio | Owner confirmed audible output after the pad/1.0.0.9 update; headphones and jack switching remain untested | Audible stereo speakers, headphones and jack switching; no added boot test tone |
-| Battery / RTC / buttons | Before the combined update, the Lite reported battery capacity, voltage and changing power state. The RTC read succeeded and restored system time from its saved offset. The power-button driver recorded a press and a submitted HID report. | Confirm volume-button input and observe charging transitions with the new Lite PD profile. |
+| Battery / RTC / buttons | Installed **SwitchBattery 1.0.0.11**, **SwitchRtc 1.0.0.3**, **SwitchPowerButton 1.0.0.6**. Earlier battery/RTC and button observations remain historical acceptance; the version inventory does not repeat those tests. | Confirm volume-button input and observe charging transitions with the Lite PD profile. |
 | Charge termination | SwitchBattery 1.0.0.11 is installed. ARM64 build, native signatures, live device start and REG05 0x02 → 0x8A readback passed. Automatic termination and an eight-hour safety timer are enabled without changing charging limits. | Observe a complete full-charge/recharge cycle. [Policy and evidence](power-performance.md#charge-termination) |
 | Bluetooth | Installed 1.0.0.19 retains the bounded PH4 reset/full-probe retry and prepares UART-D before HCI access. Host tests, signatures and readback pass; the owner confirmed Bluetooth working. | Bluetooth works in the observed boot; verify repeated startup and sleep/resume separately. |
 | USB-C host | ARM64 host firmware and signed mailbox/PD packages deployed to the card. Switchroot Ubuntu enumerated both root hubs on this Lite. Windows hardware test pending. | Enumerate a peripheral through USB-C in Windows. |
-| Built-in controls / motion | Windows enumerated the HID gamepad and mouse and received SIO input. Version 0.2.3 provides Capture, Plus, right-stick scrolling, middle click and D-pad keyboard arrows. The default branch retains 0.2.3; the display-driven 0.2.4 experiment is isolated on sc7-test. | Confirm desktop navigation, in-game controls and motion on the Lite. [Mapping](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/SwitchSensor/README.md) |
-| Wi-Fi | SwitchWifi 0.5.5 automatically reconnected to WPA2-Personal, obtained a DHCP lease and default gateway, and reached the Internet on trimmed Pro. | Measure sustained traffic and group rekey. |
+| Built-in controls / motion | Installed **SwitchSio 0.2.5.0**; default source remains **0.2.3.0**. Windows previously enumerated HID gamepad/mouse and received SIO input. Capture, Plus, scrolling, middle click and D-pad mappings are documented. | The installed version is not a new functional acceptance of each mapping, games or motion. [Mapping](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/SwitchSensor/README.md) |
+| Wi-Fi | **SwitchWifi 0.5.7.0**, `oem88.inf`, Code 0, SYS SHA256 `61fa3cae…` reverified on November 13 00:25–00:26 UTC. The owner previously confirmed basic operation. No 0.5.8 package was found in DriverStore or the default source. | Sustained traffic, repeated reconnects and group rekey remain unverified. |
 | Paging | Returned card contains a 512 MiB pagefile; 2048 MB maximum retained and TempPageFile absent | Persistent pagefile creation without the startup warning |
 | Display output | The owner confirmed a working landscape desktop on trimmed Pro. | Preserve working landscape output. |
 | 3D graphics | Native Vulkan triangle readback and Display-class Code 0 passed on the Lite with experimental builds. | Active WDDM panel presentation and DWM acceleration are in development. [GPU status](https://github.com/ruje0504-2/mesa-switch-woa/blob/main/tegra-x1-wddm/docs/STATUS.md) |
@@ -93,10 +111,12 @@ The combined build adds `SWITCH_LITE_SIO=1` for the separate Lite UART-C control
 
 ## Execution order
 
-1. Desktop boot and Bluetooth now pass on SD 0.5.0.3 + Bluetooth 1.0.0.19.
-   Preserve that combination, FAT32 visibility and all physical partitions.
-2. Capture actual SD timing, tuning and recovery results before declaring
-   DDR200 activation or SDR104 fallback accepted.
+1. Preserve installed SD 0.5.1.1, Bluetooth 1.0.0.19, FAT32 visibility and all
+   physical partitions. Its boot/readback result is separate from historical
+   0.5.0.3 desktop acceptance and future GPU trials.
+2. Investigate the recorded one-tap DDR200 window separately; do not weaken
+   qualification or confuse SDR104 fallback with active DDR200. Validate
+   actual crash capture separately from normal storage I/O.
 3. SC7 work is paused on the paired `sc7-test` branches. Resume only when
    requested. Keep
    its platform and input-power experiments out of normal builds and updates.
@@ -109,7 +129,7 @@ Reference Switchroot L4T Linux kernel commit
 [SD mode selection and fallback](https://github.com/CTCaer/switch-l4t-kernel-4.9/blob/2d0059fd3167a8df756de2aa0489d4aa70a9fc15/drivers/mmc/core/sd.c#L519)
 and [Tegra DDR200 manual tuning](https://github.com/CTCaer/switch-l4t-kernel-4.9/blob/2d0059fd3167a8df756de2aa0489d4aa70a9fc15/drivers/mmc/host/sdhci-tegra.c#L1693).
 
-Candidate **0.5.0.3** is installed with `NV_T214_DDR200=1`. Completed SCR/CMD6
+The **0.5.1.1** package is built with `NV_T214_DDR200=1`. Completed SCR/CMD6
 reads feed the SD 6.x/vendor-function-14 gate. It verifies SDR104, switches
 the card's command system and host DDR signaling, tunes 128 taps at a
 399.36 MHz module / 199.68 MHz card clock, and compares four WINARM boot-sector
@@ -121,7 +141,10 @@ corrupted readbacks and clock limits. ARM64 builds and signed package checks
 pass. The earlier 0.5.0.1 combination failed with INACCESSIBLE_BOOT_DEVICE;
 0.5.0.3 restores the event masks after private recovery. Its physical boot
 result passed with working Bluetooth. This is not proof of active DDR200
-or throughput acceptance.
+or throughput acceptance. The newer 0.5.1.1 diagnostics distinguish a full
+narrow scan from early tuning termination and preserve the original capability
+result after recovery. The existing one-tap record alone cannot identify the
+card's limitation or justify weakening the eight-tap threshold.
 [Implementation and diagnostics](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/Tegra210Sdhc/README.md#t214-ddr200-candidate-0501)
 
 - Detect the SD specification revision and vendor command-system capability
