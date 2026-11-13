@@ -45,7 +45,22 @@ capability, **128 samples / 1 timeout / 1-tap window**, followed by successful
 SDR104 recovery. Thus the scan was not cut short after one sample; the narrow
 window's hardware/configuration cause remains unproven. No new volmgr event
 was found by 00:55 UTC, but actual dump capture has not been tested.
-[Current storage evidence](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/Tegra210Sdhc/README.md#ddr200-fallback-evidence-0511)
+[0.5.1.1 storage evidence](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/Tegra210Sdhc/README.md#ddr200-fallback-evidence-0511)
+
+The current **0.5.1.2 / oem90.inf / Code 0** package adds explicit controller
+readbacks at the DDR tuning command/clock boundaries and retains per-tap
+passing/response bitmaps. The final 2026-11-12 **17:48 PST** boot
+(2026-11-13 **01:48 UTC**) recorded passing taps **30 and 77**, all 128
+buffer-ready responses, no timeout, a longest run of one, and successful
+SDR104 recovery. The 8 MiB WriteThrough/flush/SHA-256 readback test passed;
+ADMA errors were zero and no volmgr event appeared in the checked boot log.
+The same boot verified **SwitchFan 1.0.0.13 / oem91.inf**, with default CPU
+target and actual readback **1497.6 MHz** and CPU error zero. The original
+1996800-kHz firmware request is retained separately as `CpuHandoffKhz`.
+Partitions, RAM requests, the other fan settings and power settings were
+unchanged. These checks establish normal storage operation and the new CPU
+target, not active DDR200 or actual crash-dump capture.
+[Current storage evidence](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/Tegra210Sdhc/README.md#0512-installation-and-runtime-result)
 
 FAT32 remains visible. The latest comparison found no clear responsiveness
 difference between views; both profiles remain available and performance
@@ -69,11 +84,11 @@ The tested [1.0.0.4 source](https://github.com/ruje0504-2/Windows-for-Switch-Dri
 
 | Area | Evidence / current gap | Acceptance |
 |---|---|---|
-| SD / boot | Signed FAT32-visible **0.5.1.1 / oem89.inf / Code 0**, active SYS hash and a planned boot were verified. Existing BL33 and partition extents were retained; Bluetooth remains 1.0.0.19. | 8 MiB write/flush/readback passed. This is storage validation, not a new GPU desktop acceptance. |
-| SD DDR200 | Capability advertised; 128 samples, 1 timeout, longest window 1 tap. The driver rejected the window below 8 taps and recovered to **SDR104 / 199.68 MHz**. | Fallback and subsequent storage operation observed. Active DDR200, the narrow-window cause and sustained throughput remain unverified. |
-| SD crash dumps | **0.5.1.1** contains bounded PIO takeover from SDR104/DDR200 and card/partition identity checks. No new volmgr event was found in this boot through 00:55 UTC; the 512 MiB pagefile remains. | No actual crash dump has been generated; absence of initialization errors is not dump-capture acceptance. |
+| SD / boot | Signed FAT32-visible **0.5.1.2 / oem90.inf / Code 0**, active SYS hash and restart were verified. Existing BL33 and partition extents were retained; Bluetooth remains 1.0.0.19. | 8 MiB write/flush/readback passed. This is storage validation, not a new GPU desktop acceptance. |
+| SD DDR200 | Capability advertised; 128 samples, 0 timeouts, isolated passing taps 30 and 77, longest run 1 tap. The eight-tap gate rejected this result and recovered to **SDR104 / 199.68 MHz**. | Fallback and subsequent storage operation observed. Active DDR200, the narrow-window cause and sustained throughput remain unverified. |
+| SD crash dumps | **0.5.1.2** retains bounded PIO takeover from SDR104/DDR200 and card/partition identity checks. No volmgr event was found in the final combined validation boot. | No actual crash dump has been generated; absence of initialization errors is not dump-capture acceptance. |
 | GPIO / I2C / touch | Installed GPIO **1.0.0.4**, I2C **1.0.0.5**, Lite touch **1.0.1.2**. Default touch source remains 1.0.1.0; experimental context restoration is isolated on sc7-test. | Earlier touch clicks passed. The newer package inventory is not a fresh press/release or three-point test. |
-| CPU / fan / EMC | CPU **1996.8 MHz**, SwitchFan **1.0.0.12**. Curve: 32% at 35 C, 75% at 40 C, 100% at 45 C. Earlier RAM readback was 1866 MHz after BPMP rounding. | Version/hash and clock readback verified; a full physical thermal sweep and 2100 MHz RAM remain unverified. |
+| CPU / fan / EMC | Default and actual CPU **1497.6 MHz**, SwitchFan **1.0.0.13 / oem91.inf**, CPU error 0. Curve: 32% at 35 C, 75% at 40 C, 100% at 45 C. RAM requests are unchanged; earlier actual RAM readback was 1866 MHz. | Version/hash and post-reboot clock readback verified; a full physical thermal sweep and 2100 MHz RAM remain unverified. |
 | Backlight / S0 wake | Installed switchpwrbtn **1.0.0.6**; default source and owner-confirmed short-button wake result remain **1.0.0.4**, with 12 power and 12 wake reports. | Earlier repeated short-button cycles passed. This does not validate the newer 1.0.0.6 package or long-duration idle; SC7 is not implemented. |
 | Audio | Owner confirmed audible output after the pad/1.0.0.9 update; headphones and jack switching remain untested | Audible stereo speakers, headphones and jack switching; no added boot test tone |
 | Battery / RTC / buttons | Installed **SwitchBattery 1.0.0.11**, **SwitchRtc 1.0.0.3**, **SwitchPowerButton 1.0.0.6**. Earlier battery/RTC and button observations remain historical acceptance; the version inventory does not repeat those tests. | Confirm volume-button input and observe charging transitions with the Lite PD profile. |
@@ -111,8 +126,9 @@ The combined build adds `SWITCH_LITE_SIO=1` for the separate Lite UART-C control
 
 ## Execution order
 
-1. Preserve installed SD 0.5.1.1, Bluetooth 1.0.0.19, FAT32 visibility and all
-   physical partitions. Its boot/readback result is separate from historical
+1. Preserve installed SD 0.5.1.2, SwitchFan 1.0.0.13 with default CPU
+   1497.6 MHz, Bluetooth 1.0.0.19, FAT32 visibility and all physical
+   partitions. Its boot/readback result is separate from historical
    0.5.0.3 desktop acceptance and future GPU trials.
 2. Investigate the recorded one-tap DDR200 window separately; do not weaken
    qualification or confuse SDR104 fallback with active DDR200. Validate
@@ -129,13 +145,14 @@ Reference Switchroot L4T Linux kernel commit
 [SD mode selection and fallback](https://github.com/CTCaer/switch-l4t-kernel-4.9/blob/2d0059fd3167a8df756de2aa0489d4aa70a9fc15/drivers/mmc/core/sd.c#L519)
 and [Tegra DDR200 manual tuning](https://github.com/CTCaer/switch-l4t-kernel-4.9/blob/2d0059fd3167a8df756de2aa0489d4aa70a9fc15/drivers/mmc/host/sdhci-tegra.c#L1693).
 
-The **0.5.1.1** package is built with `NV_T214_DDR200=1`. Completed SCR/CMD6
+The **0.5.1.2** package is built with `NV_T214_DDR200=1`. Completed SCR/CMD6
 reads feed the SD 6.x/vendor-function-14 gate. It verifies SDR104, switches
 the card's command system and host DDR signaling, tunes 128 taps at a
 399.36 MHz module / 199.68 MHz card clock, and compares four WINARM boot-sector
 readbacks before normal I/O. Failed setup triggers one bounded SDR104
 reinitialization and identity check. A changed CID/RCA blocks ordinary I/O
-until fresh SDPORT enumeration; physical recovery behavior still needs testing.
+until fresh SDPORT enumeration; those identity-mismatch cases are host-model
+tests. Successful physical fallback and subsequent storage I/O are recorded above.
 Host fault tests cover both partition views, narrow windows, timeouts,
 corrupted readbacks and clock limits. ARM64 builds and signed package checks
 pass. The earlier 0.5.0.1 combination failed with INACCESSIBLE_BOOT_DEVICE;
@@ -143,8 +160,10 @@ pass. The earlier 0.5.0.1 combination failed with INACCESSIBLE_BOOT_DEVICE;
 result passed with working Bluetooth. This is not proof of active DDR200
 or throughput acceptance. The newer 0.5.1.1 diagnostics distinguish a full
 narrow scan from early tuning termination and preserve the original capability
-result after recovery. The existing one-tap record alone cannot identify the
-card's limitation or justify weakening the eight-tap threshold.
+result after recovery. Version 0.5.1.2 adds per-tap maps and posted-write
+ordering tests; even its zero-timeout physical scan had only isolated passing
+taps. This cannot identify the card's limitation or justify weakening the
+eight-tap threshold.
 [Implementation and diagnostics](https://github.com/ruje0504-2/Windows-for-Switch-Drivers/blob/hdh001-winarm-bounded-write/drivers/Tegra210Sdhc/README.md#t214-ddr200-candidate-0501)
 
 - Detect the SD specification revision and vendor command-system capability

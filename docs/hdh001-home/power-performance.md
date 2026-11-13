@@ -31,12 +31,15 @@ the default branch and do not require the experimental PEP. Their builds,
 focused tests and package signatures passed. SD 0.5.0.3 additionally fixes
 event-mask loss during private SDR104 fallback. The owner confirmed desktop
 boot and working Bluetooth on that combination. The current SD version is
-**0.5.1.1**, verified after a planned restart on November 13 UTC with an
-8 MiB write/flush/readback check. It advertises capability but records a
-one-tap window after 128 DDR200 samples, then successful SDR104 fallback.
+**0.5.1.2**, verified after the November 12 17:48 PST restart
+(November 13 01:48 UTC) with an 8 MiB write/flush/readback check. It advertises
+capability but records isolated passing taps 30 and 77 in 128 DDR200 samples,
+with zero timeouts and a one-tap maximum window, then successful SDR104 fallback.
 Crash-dump takeover support does not enable S4. The full power-settings
-snapshot was unchanged, CPU remained **1996.8 MHz**, and fan version **12**
-remained active. These storage checks do not add sleep/wake acceptance.
+snapshot was unchanged. The owner-requested CPU default was updated to
+**1497.6 MHz** by **SwitchFan 1.0.0.13**; requested and actual clock readbacks
+matched after the same restart. The remaining fan and RAM settings were
+unchanged. These storage/clock checks do not add sleep/wake acceptance.
 The earlier Bluetooth 1.0.0.18 + DDR200 0.5.0.1 combination failed with
 INACCESSIBLE_BOOT_DEVICE. The owner supplied the stop-code photograph; no
 current crash dump or driver diagnostics survived on the returned card.
