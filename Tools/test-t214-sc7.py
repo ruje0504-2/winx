@@ -38,7 +38,9 @@ harness = r'''
 #define PSCI_E_DENIED -3
 #define PMC_CONFIG 0
 #define PMC_SCRATCH1 0x54U
-#define PMC_SCRATCH39 0x134U
+#define PMC_SCRATCH39 0x138U
+#define PMC_SECURE_SCRATCH119 0xB34U
+#define TEGRA_DRAM_BASE UINT64_C(0x80000000)
 #define ERROR(...) ((void)0)
 
 /* PSCI_EXTENDED_STATE_ID := 1 encoding used by plat/nvidia/tegra/platform.mk */
@@ -47,12 +49,12 @@ harness = r'''
 #define PSTATE_ID_MASK 0xfffffffU
 
 typedef struct { uint8_t pwr_domain_state[3]; } psci_power_state_t;
-typedef struct { uint64_t sc7entry_fw_base; } plat_params_from_bl2_t;
+typedef struct { uint64_t sc7entry_fw_base; uint64_t tzdram_base; } plat_params_from_bl2_t;
 
 static plat_params_from_bl2_t params;
 static int init_status, reply_status, init_calls, enable_reqs, cancel_reqs;
 static bool b01;
-static uint32_t pmc[0x400 / 4];
+static uint32_t pmc[0xC00 / 4];
 static uint32_t gicd[0x1000 / 4];
 static uint32_t gicd_banked[4][0x500 / 4];
 static uint32_t gicc_banked[4][0x100 / 4];
@@ -188,8 +190,10 @@ static void setup_valid_board(void) {
     pmc[0x0c / 4] = 0x13579U;
     pmc[0x10 / 4] = 0x24680U;
     pmc[0x14 / 4] = 0x5500U;
-    pmc[0x54 / 4] = 0x80010000U;    /* PMC_SCRATCH1 warmboot PA */
-    pmc[0x134 / 4] = 0x4003e000U;   /* PMC_SCRATCH39 warmboot/MC save */
+    params.tzdram_base = 0xFFF00000U;
+    /* Hekate B01 handoff: SCRATCH1 may be zero; both entries are in DRAM. */
+    pmc[PMC_SECURE_SCRATCH119 / 4] = 0xFFE3EC00U;
+    pmc[PMC_SCRATCH39 / 4] = 0xFFE00040U;
     pmc[0x160 / 4] = 0x12345U;
     pmc[0x164 / 4] = 0x87654U;
     pmc[0x168 / 4] = (1U << 19) | 0x80U;
@@ -268,13 +272,21 @@ int main(void) {
     tegra_lite_sc7_cancel();
     assert(cancel_reqs == 1); /* idempotent once cancelled */
 
-    /* Missing warmboot SCRATCH1 or SCRATCH39 must reject SC7 before BPMP RPC. */
+    /* Erista SCRATCH1 cannot substitute for Mariko SECURE_SCRATCH119. */
     setup_valid_board();
-    pmc[0x54 / 4] = 0;
+    pmc[PMC_SCRATCH1 / 4] = 0x80010000U;
+    pmc[PMC_SECURE_SCRATCH119 / 4] = 0;
     run(sc7, PSCI_E_NOT_SUPPORTED, 0);
-    setup_valid_board();
-    pmc[0x134 / 4] = 0;
-    run(sc7, PSCI_E_NOT_SUPPORTED, 0);
+    const uint32_t invalid_entries[] = {0U, 0x4003e000U, 0x7ffffffcU,
+                                       0xFFF00000U, 0xFFFFFFFCU, 0xFFE00041U};
+    for (unsigned i = 0; i < sizeof(invalid_entries) / sizeof(invalid_entries[0]); i++) {
+        setup_valid_board();
+        pmc[PMC_SECURE_SCRATCH119 / 4] = invalid_entries[i];
+        run(sc7, PSCI_E_NOT_SUPPORTED, 0);
+        setup_valid_board();
+        pmc[PMC_SCRATCH39 / 4] = invalid_entries[i];
+        run(sc7, PSCI_E_NOT_SUPPORTED, 0);
+    }
 
     /* Unarmed GIC INTID 118 (disabled or Group 0) must reject SC7 with DENIED. */
     setup_valid_board();

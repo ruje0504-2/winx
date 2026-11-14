@@ -65,10 +65,15 @@ A later long screen-off session on battery became unresponsive and required a fo
 The driver selects HID Wake Up when the display is off and Power Down while
 it is on. Holding a wake press across the display transition does not submit
 another power request. Polling lifecycle is drained/restarted without adding
-PMIC/GIC wake interrupts or a processor PEP. SC7 development remains paused on
-[`sc7-test`](https://github.com/ruje0504-2/winx/tree/sc7-test), with the matching
-driver branch; S4 remains removed. Normal shutdown and native restart retain
-their separate accepted results above.
+PMIC/GIC wake interrupts or a processor PEP in that accepted baseline.
+The 2026-11-14 source integration adds opt-in PMIC wake and PEP descriptions
+(`SWITCH_LITE_SLEEP`, `SWITCH_LITE_PROCESSOR_IDLE`) plus reviewed TF-A SC7
+patches. They are not enabled by the normal build; `EnableSc7` defaults to zero.
+Local compilation and controlled tests pass, while full native SC7 wake,
+display and XUSB recovery remain unaccepted. The default preprocessed DSDT
+and same-toolchain TF-A binary match the pre-SC7 base. S4 remains removed.
+Normal shutdown and native restart retain their separate physical results
+above; this integration review did not install firmware or operate the device.
 
 Bluetooth 1.0.0.19 retains bounded patch/reset recovery and UART-D host
 preparation. The historical SD 0.5.0.3 update retained DDR200 development and corrected clock ordering

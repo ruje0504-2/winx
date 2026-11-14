@@ -19,6 +19,7 @@ POWER_PATCHES = [REPO / "patches/atf" / name for name in (
     "0007-t214-bpmp-sc7-prepare.patch",
     "0008-t214-sc7-clock-context.patch",
     "0009-t214-sc7-pinmux-context.patch",
+    "0010-t214-mariko-sc7-handoff.patch",
 )]
 
 

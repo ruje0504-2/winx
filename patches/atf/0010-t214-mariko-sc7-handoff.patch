@@ -1,0 +1,65 @@
+From: ruje0504-2 integration review
+Subject: [PATCH] t214: validate Mariko SC7 handoff registers
+
+Hekate 8e1392df4569ac501a115867056b13c361429e9e writes the B01
+warmboot address to SECURE_SCRATCH119, not SCRATCH1. BPMP's B01
+entry in SCRATCH39 is also a DRAM address. Reject malformed entry
+addresses before asking BPMP to suspend; this is not authentication
+or proof that the firmware carveout has been provisioned.
+
+Reference: https://github.com/CTCaer/hekate/blob/8e1392df4569ac501a115867056b13c361429e9e/bootloader/l4t/l4t.c
+Target: Lineage TF-A 85081cab2050051ea6e93206ef0f80bc0676e613 after patches 0001-0009.
+
+diff --git a/plat/nvidia/tegra/include/drivers/pmc.h b/plat/nvidia/tegra/include/drivers/pmc.h
+--- a/plat/nvidia/tegra/include/drivers/pmc.h
++++ b/plat/nvidia/tegra/include/drivers/pmc.h
+@@ -54,6 +54,7 @@
+ #define PMC_SCRATCH201				U(0x844)
+ #define PMC_SECURE_SCRATCH108		U(0xB08)
+ #define PMC_SECURE_SCRATCH109		U(0xB0C)
++#define PMC_SECURE_SCRATCH119		U(0xB34)
+ #define PMC_SECURE_SCRATCH110		U(0xB10)
+ 
+ static inline uint32_t tegra_pmc_read_32(uint32_t off)
+diff --git a/plat/nvidia/tegra/soc/t210/t214/sc7.c b/plat/nvidia/tegra/soc/t210/t214/sc7.c
+--- a/plat/nvidia/tegra/soc/t210/t214/sc7.c
++++ b/plat/nvidia/tegra/soc/t210/t214/sc7.c
+@@ -23,6 +23,7 @@
+ #include <lib/psci/psci.h>
+ #include <pmc.h>
+ #include <tegra_def.h>
++#include <tegra_private.h>
+ 
+ #define LITE_PMC_SW_WAKE_STATUS		0x018U
+ #define LITE_PMC_COREPWRGOOD_TIMER	0x03cU
+@@ -95,6 +96,17 @@
+ 			(int)sizeof(request), &unused_response, 0);
+ }
+ 
++/* Hekate 8e1392df: bootloader/l4t/l4t.c B01 warmboot/BPMP handoff.
++ * These checks only validate address shape, not firmware contents or residency.
++ * Loading compatible firmware and reserving its carveout remain prerequisites. */
++static bool lite_sc7_entry_valid(uint32_t entry)
++{
++	const plat_params_from_bl2_t *params = bl31_get_plat_params();
++
++	return ((entry & 3U) == 0U) && ((uint64_t)entry >= TEGRA_DRAM_BASE) &&
++	       ((uint64_t)entry < params->tzdram_base);
++}
++
+ int32_t tegra_lite_sc7_prepare(void)
+ {
+ 	const uint32_t request[] = { TEGRA_PM_SC7, 0U };
+@@ -104,9 +116,9 @@
+ 	uint32_t pmu_bit = 1U << (LITE_GIC_PMU_EXT_INTID % 32U);
+ 
+ 	sc7_armed = false;
+-	/* Require both warmboot_mariko (SCRATCH1) and bpmpfw_b01 (SCRATCH39). */
+-	if ((tegra_pmc_read_32(PMC_SCRATCH1) == 0U) ||
+-	    (tegra_pmc_read_32(PMC_SCRATCH39) == 0U)) {
++	/* Mariko uses SECURE_SCRATCH119; SCRATCH1 belongs to the Erista path. */
++	if (!lite_sc7_entry_valid(tegra_pmc_read_32(PMC_SECURE_SCRATCH119)) ||
++	    !lite_sc7_entry_valid(tegra_pmc_read_32(PMC_SCRATCH39))) {
+ 		return PSCI_E_NOT_SUPPORTED;
+ 	}
+ 

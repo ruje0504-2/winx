@@ -1,8 +1,26 @@
 # T214 PSCI power and BL33 entry patches
 
-The build tool applies patches 0001 through 0009 to LineageOS ATF revision `85081cab2050051ea6e93206ef0f80bc0676e613`. It adapts Switchroot B01 restart preparation and MAX77620 shutdown in the shared T210 platform, gated by the T210B01 chip check and `SWITCH_LITE_PMIC_RESET=1`, and optionally enables T210B01 SC7 preparation and context restoration (`0007`–`0009`) when built with `--sc7` (`SWITCH_LITE_SC7=1`). Only the SoC-specific helpers live under `soc/t210/t214`.
+The build tool applies patches 0001 through 0010 to LineageOS ATF revision `85081cab2050051ea6e93206ef0f80bc0676e613`. It adapts Switchroot B01 restart preparation and MAX77620 shutdown in the shared T210 platform, gated by the T210B01 chip check and `SWITCH_LITE_PMIC_RESET=1`, and optionally enables T210B01 SC7 preparation and context restoration (`0007`–`0010`) when built with `--sc7` (`SWITCH_LITE_SC7=1`). Only the SoC-specific helpers live under `soc/t210/t214`.
 
 The default build (`SWITCH_LITE_SC7=0`) leaves SC7 disabled and preserves the existing shutdown/restart and BL33 entry behavior. Passing `--sc7` enables BPMP `MRQ_ENABLE_SUSPEND`, warmboot/wake-51 preflight checks, GICv2 Group 1 and SMP secondary-core recovery (`0007`), CAR clock/PLL context (`0008`), and GPIO-output-first pinmux restoration (`0009`).
+
+Patch `0010` corrects the Mariko handoff to `PMC_SECURE_SCRATCH119` (`0xB34`)
+and uses the actual `PMC_SCRATCH39` offset (`0x138`). Both B01 entry addresses
+must be aligned DRAM addresses below TZDRAM; these are structural checks, not
+firmware authentication, loading or carveout reservation. The reference is
+[Hekate 8e1392df](https://github.com/CTCaer/hekate/blob/8e1392df4569ac501a115867056b13c361429e9e/bootloader/l4t/l4t.c).
+The regression fixture uses the B01 DRAM BPMP entry, not an IRAM address.
+
+Integration review on 2026-11-14 rebuilt both configurations and ran the three
+host firmware suites with ASan/UBSan. With the same compiler, the default binary
+is byte-identical to the pre-SC7 six-patch base; it is not byte-identical to the
+historically deployed binary built earlier. The local default hash is
+`e9a7997a3f1e3e70b02443ed375c3063cf3caac11947b8315466879afa499fb1`.
+The reviewed SC7 binary hash is
+`ace4bd24b6b68deab77850221cc990f973b8af221fb137102dd8e6eb70092020`.
+Neither binary was deployed by this review. No native SC7 success is claimed;
+compatible BPMP/warmboot provisioning, retained firmware carveouts, display/DSI
+and XUSB resume still require completion and hardware acceptance.
 
 ## Build
 
