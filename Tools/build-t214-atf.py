@@ -16,6 +16,9 @@ POWER_PATCHES = [REPO / "patches/atf" / name for name in (
     "0004-t214-power-boundary-trace.patch",
     "0005-t214-bl33-entry.patch",
     "0006-t214-windows-restart-entry.patch",
+    "0007-t214-bpmp-sc7-prepare.patch",
+    "0008-t214-sc7-clock-context.patch",
+    "0009-t214-sc7-pinmux-context.patch",
 )]
 
 
@@ -33,6 +36,8 @@ def main():
     parser.set_defaults(restart_as_off=False)
     parser.add_argument("--trace-power-boundary", action="store_true",
                         help="diagnostic fan pulses at final PSCI entry; not a shutdown fix")
+    parser.add_argument("--sc7", action="store_true",
+                        help="enable T210B01 SC7 BPMP/wake/GICv2/SMP preparation and CAR/pinmux context restoration")
     args = parser.parse_args()
     source = args.source.resolve()
     if (source / ".git").exists():
@@ -54,6 +59,8 @@ def main():
     build_base = "build-lite-entry-r8-off" if args.restart_as_off else "build-lite-entry-r8-native"
     if args.trace_power_boundary:
         build_base += "-trace"
+    if args.sc7:
+        build_base += "-sc7"
     # LineageOS android_device_nintendo_nx/vendor/nx-vendor.mk. Hekate loads
     # at 0xFFF00000 and supplies the reset-to-BL31 parameters through IRAM.
     flags = [make, f"-j{args.jobs}", "PLAT=tegra", "TARGET_SOC=t210",
@@ -65,7 +72,9 @@ def main():
              "ENABLE_ASSERTIONS=1", "SWITCH_LITE_PMIC_RESET=1",
              f"SWITCH_LITE_POWER_TRACE={int(args.trace_power_boundary)}",
              f"SWITCH_LITE_RESTART_AS_OFF={int(args.restart_as_off)}",
-             "BUILD_STRING=85081ca-lite-entry-r8" + ("-trace" if args.trace_power_boundary else "")]
+             f"SWITCH_LITE_SC7={int(args.sc7)}",
+             "BUILD_STRING=85081ca-lite-entry-r8" + ("-trace" if args.trace_power_boundary else "")
+             + ("-sc7" if args.sc7 else "")]
     help_text = subprocess.check_output([args.cross_prefix + "ld", "--help"], text=True)
     if "--no-warn-rwx-segments" in help_text:
         # TF-A 2.6's ELF layout predates this binutils diagnostic. Runtime MMU

@@ -1,0 +1,640 @@
+Subject: [PATCH] t214: prepare BPMP, wake 51, GICv2 and SMP state for SC7
+
+Apply after 0006-t214-windows-restart-entry.patch. Enabled only when
+SWITCH_LITE_SC7=1 on T210B01.
+
+- Require non-zero PMC_SCRATCH1/PMC_SCRATCH39 warmboot state, active-low
+  GIC Group 1 INTID 118 (PMU_EXT) delivery, NX B01 PMC power-good/power-off
+  timers, active-low PMC wake event 51, and BPMP MRQ_ENABLE_SUSPEND before
+  committing PSCI CPU_SUSPEND(PSTATE_ID_SOC_POWERDN = 0x4000001B).
+- Cancel MRQ_ENABLE_SUSPEND and downgrade cleanly to C7 when another CPU
+  wakes before the last-CPU cluster lock completes.
+- Save and restore non-secure GICv2 Group 1 banked CPU state across C7/CC6/SC7
+  and global distributor SPIs, PMC interrupt polarity and SYSCTR0 across SC7.
+- Re-initialize secondary CPU reset vectors (SB_AA64_RESET_LOW/HI), MC AHB
+  redirection disable, FIQ routing, and wake C7-suspended secondary cores on
+  SC7 exit while keeping CPU_OFF cores powered down.
+
+References:
+https://github.com/CTCaer/switch-l4t-kernel-4.9/blob/2d0059fd3167a8df756de2aa0489d4aa70a9fc15/drivers/soc/tegra/pm-tegra210.c
+https://github.com/CTCaer/switch-l4t-kernel-4.9/blob/2d0059fd3167a8df756de2aa0489d4aa70a9fc15/drivers/soc/tegra/pmc.c
+https://github.com/LineageOS/android_hardware_nintendo_arm-trusted-firmware/commit/85081cab2050051ea6e93206ef0f80bc0676e613
+
+diff --git a/plat/nvidia/tegra/common/tegra_pm.c b/plat/nvidia/tegra/common/tegra_pm.c
+index 07526b1ad..712c9a38b 100644
+--- a/plat/nvidia/tegra/common/tegra_pm.c
++++ b/plat/nvidia/tegra/common/tegra_pm.c
+@@ -28,6 +28,14 @@
+ extern uint64_t tegra_bl31_phys_base;
+ extern uint64_t tegra_sec_entry_point;
+ 
++#if SWITCH_LITE_SC7
++extern void tegra_lite_gic_pcpu_save(unsigned int cpu);
++extern void tegra_lite_gic_pcpu_restore(unsigned int cpu);
++extern void tegra_lite_gic_pcpu_invalidate(unsigned int cpu);
++extern void tegra_lite_gic_dist_save(void);
++extern void tegra_lite_gic_dist_restore(void);
++#endif
++
+ /*******************************************************************************
+  * This handler is called by the PSCI implementation during the `SYSTEM_SUSPEND`
+  * call to get the `power_state` parameter. This allows the platform to encode
+@@ -95,6 +103,11 @@ static int32_t tegra_pwr_domain_on(u_register_t mpidr)
+  ******************************************************************************/
+ static void tegra_pwr_domain_off(const psci_power_state_t *target_state)
+ {
++#if SWITCH_LITE_SC7
++	if (tegra_chipid_is_t210_b01()) {
++		tegra_lite_gic_pcpu_invalidate((unsigned int)plat_my_core_pos());
++	}
++#endif
+ 	(void)tegra_soc_pwr_domain_off(target_state);
+ 
+ 	/* disable GICC */
+@@ -118,6 +131,15 @@ void tegra_pwr_domain_suspend_pwrdown_early(const psci_power_state_t *target_sta
+  ******************************************************************************/
+ static void tegra_pwr_domain_suspend(const psci_power_state_t *target_state)
+ {
++#if SWITCH_LITE_SC7
++	if (tegra_chipid_is_t210_b01()) {
++		tegra_lite_gic_pcpu_save((unsigned int)plat_my_core_pos());
++		if (target_state->pwr_domain_state[PLAT_MAX_PWR_LVL] ==
++				PSTATE_ID_SOC_POWERDN) {
++			tegra_lite_gic_dist_save();
++		}
++	}
++#endif
+ 	(void)tegra_soc_pwr_domain_suspend(target_state);
+ 
+ 	/* disable GICC */
+@@ -168,6 +190,12 @@ static void tegra_pwr_domain_on_finish(const psci_power_state_t *target_state)
+ 		 * GIC cpu interfaces.
+ 		 */
+ 		tegra_gic_init();
++#if SWITCH_LITE_SC7
++		if (tegra_chipid_is_t210_b01()) {
++			tegra_lite_gic_dist_restore();
++			tegra_lite_gic_pcpu_restore((unsigned int)plat_my_core_pos());
++		}
++#endif
+ 
+ 		/* Restart console output. */
+ 		plat_enable_console(plat_params->uart_id);
+@@ -190,6 +218,11 @@ static void tegra_pwr_domain_on_finish(const psci_power_state_t *target_state)
+ 		 * Initialize the GIC cpu and distributor interfaces
+ 		 */
+ 		tegra_gic_pcpu_init();
++#if SWITCH_LITE_SC7
++		if (tegra_chipid_is_t210_b01()) {
++			tegra_lite_gic_pcpu_restore((unsigned int)plat_my_core_pos());
++		}
++#endif
+ 	}
+ 
+ 	/*
+diff --git a/plat/nvidia/tegra/soc/t210/plat_psci_handlers.c b/plat/nvidia/tegra/soc/t210/plat_psci_handlers.c
+index a36590aa9..81f2677fc 100644
+--- a/plat/nvidia/tegra/soc/t210/plat_psci_handlers.c
++++ b/plat/nvidia/tegra/soc/t210/plat_psci_handlers.c
+@@ -50,6 +50,12 @@ extern void tegra_lite_power_trace(void);
+ #endif
+ #endif
+ 
++#if SWITCH_LITE_SC7
++static uint8_t cpu_c7_suspended[PLATFORM_MAX_CPUS_PER_CLUSTER];
++extern int32_t tegra_lite_sc7_prepare(void);
++extern void tegra_lite_sc7_cancel(void);
++#endif
++
+ int32_t tegra_soc_validate_power_state(unsigned int power_state,
+ 					psci_power_state_t *req_state)
+ {
+@@ -77,6 +83,21 @@ int32_t tegra_soc_validate_power_state(unsigned int power_state,
+ 
+ 	case PSTATE_ID_SOC_POWERDN:
+ 
++#if SWITCH_LITE_SC7
++		if (tegra_chipid_is_t210_b01()) {
++			int32_t sc7_status;
++
++			/* The Windows CPU_SUSPEND caller does not run Linux's
++			 * syscore suspend callbacks. Require live BPMP, warmboot
++			 * vectors and armed PMIC wake routing before committing.
++			 */
++			if (tegra_bpmp_init() != 0)
++				return PSCI_E_NOT_SUPPORTED;
++			sc7_status = tegra_lite_sc7_prepare();
++			if (sc7_status != PSCI_E_SUCCESS)
++				return sc7_status;
++		} else
++#endif
+ 		/*
+ 		 * sc7entry-fw must be present in the system when the bpmp
+ 		 * firmware is not present, for a successful System Suspend
+@@ -183,6 +204,16 @@ plat_local_state_t tegra_soc_get_target_pwr_state(unsigned int lvl,
+ 			}
+ 		}
+ 
++#if SWITCH_LITE_SC7
++	} else if ((lvl == MPIDR_AFFLVL1) && (target == PLAT_MAX_OFF_STATE) &&
++		   tegra_chipid_is_t210_b01()) {
++		tegra_fc_ccplex_pgexit_lock();
++		if (!tegra_pmc_is_last_on_cpu() || !tegra_fc_is_ccx_allowed()) {
++			tegra_fc_ccplex_pgexit_unlock();
++			tegra_lite_sc7_cancel();
++			target = PSCI_LOCAL_STATE_RUN;
++		}
++#endif
+ 	} else if (((lvl == MPIDR_AFFLVL2) || (lvl == MPIDR_AFFLVL1)) &&
+ 	    (target == PSTATE_ID_SOC_POWERDN)) {
+ 		plat_params = bl31_get_plat_params();
+@@ -267,8 +298,21 @@ int tegra_soc_pwr_domain_suspend(const psci_power_state_t *target_state)
+ 		assert((stateid_afflvl1 == PLAT_MAX_OFF_STATE) ||
+ 			(stateid_afflvl1 == PSTATE_ID_SOC_POWERDN));
+ 
++#if SWITCH_LITE_SC7
++		if (tegra_chipid_is_t210_b01()) {
++			cpu_c7_suspended[mpidr & MPIDR_CPU_MASK] = 0U;
++			flush_dcache_range((uintptr_t)cpu_c7_suspended,
++					   sizeof(cpu_c7_suspended));
++		}
++#endif
+ 		/* Suspend se/se2 and pka1 for T210 B01 and se for T210 */
+ 		if (tegra_se_suspend() != 0) {
++#if SWITCH_LITE_SC7
++			if (tegra_chipid_is_t210_b01()) {
++				tegra_fc_ccplex_pgexit_unlock();
++				tegra_lite_sc7_cancel();
++			}
++#endif
+ 			ret = PSCI_E_INTERN_FAIL;
+ 		}
+ 
+@@ -280,6 +324,13 @@ int tegra_soc_pwr_domain_suspend(const psci_power_state_t *target_state)
+ 
+ 		assert(stateid_afflvl0 == PSTATE_ID_CORE_POWERDN);
+ 
++#if SWITCH_LITE_SC7
++		if (tegra_chipid_is_t210_b01()) {
++			cpu_c7_suspended[mpidr & MPIDR_CPU_MASK] = 1U;
++			flush_dcache_range((uintptr_t)cpu_c7_suspended,
++					   sizeof(cpu_c7_suspended));
++		}
++#endif
+ 		if (!tegra_bpmp_available) {
+ 			tegra_soc_cpu_prepare_pmic();
+ 		}
+@@ -287,8 +338,19 @@ int tegra_soc_pwr_domain_suspend(const psci_power_state_t *target_state)
+ 		/* Prepare for cluster idle */
+ 		tegra_fc_cluster_idle(mpidr);
+ 
+-	} else if (stateid_afflvl0 == PSTATE_ID_CORE_POWERDN) {
++	} else if ((stateid_afflvl0 == PSTATE_ID_CORE_POWERDN)
++#if SWITCH_LITE_SC7
++		   || (stateid_afflvl0 == PLAT_MAX_OFF_STATE)
++#endif
++		  ) {
+ 
++#if SWITCH_LITE_SC7
++		if (tegra_chipid_is_t210_b01()) {
++			cpu_c7_suspended[mpidr & MPIDR_CPU_MASK] = 1U;
++			flush_dcache_range((uintptr_t)cpu_c7_suspended,
++					   sizeof(cpu_c7_suspended));
++		}
++#endif
+ 		/* Prepare for cpu powerdn */
+ 		tegra_fc_cpu_powerdn(mpidr);
+ 
+@@ -491,6 +553,15 @@ int tegra_soc_pwr_domain_on_finish(const psci_power_state_t *target_state)
+ 			tegra_se_resume();
+ 		}
+ 
++#if SWITCH_LITE_SC7
++		if (tegra_chipid_is_t210_b01()) {
++			plat_secondary_setup();
++			plat_runtime_setup();
++			tegra_fc_enable_fiq_to_ccplex_routing();
++			tegra_pmc_clear_reset_type();
++		}
++#endif
++
+ 		/*
+ 		 * Lock scratch registers which hold the CPU vectors
+ 		 */
+@@ -587,6 +658,37 @@ int tegra_soc_pwr_domain_on_finish(const psci_power_state_t *target_state)
+ 	 */
+ 	tegra_fc_lock_active_cluster();
+ 
++#if SWITCH_LITE_SC7
++	if (tegra_chipid_is_t210_b01()) {
++		int my_cpu = plat_my_core_pos();
++
++		if ((my_cpu >= 0) && (my_cpu < PLATFORM_MAX_CPUS_PER_CLUSTER)) {
++			cpu_c7_suspended[my_cpu] = 0U;
++		}
++		if (target_state->pwr_domain_state[PLAT_MAX_PWR_LVL] ==
++				PLAT_SYS_SUSPEND_STATE_ID) {
++			static const uint8_t pg_id[4] = { 14U, 9U, 10U, 11U };
++			uint32_t pg = tegra_pmc_read_32(PMC_PWRGATE_STATUS);
++
++			for (int i = 0; i < PLATFORM_MAX_CPUS_PER_CLUSTER; i++) {
++				if ((i != my_cpu) && ((pg & (1U << pg_id[i])) == 0U)) {
++					cpu_powergate_mask[i] = 0;
++				}
++			}
++			for (int i = 0; i < PLATFORM_MAX_CPUS_PER_CLUSTER; i++) {
++				if ((i != my_cpu) && (cpu_c7_suspended[i] != 0U)) {
++					cpu_c7_suspended[i] = 0U;
++					flush_dcache_range((uintptr_t)cpu_c7_suspended,
++							   sizeof(cpu_c7_suspended));
++					(void)tegra_soc_pwr_domain_on((u_register_t)i);
++				}
++			}
++		}
++		flush_dcache_range((uintptr_t)cpu_c7_suspended,
++				   sizeof(cpu_c7_suspended));
++	}
++#endif
++
+ 	/*
+ 	 * Resume PMC hardware block for Tegra210 platforms
+ 	 */
+@@ -617,6 +719,13 @@ int tegra_soc_pwr_domain_on(u_register_t mpidr)
+ 
+ int tegra_soc_pwr_domain_off(const psci_power_state_t *target_state)
+ {
++#if SWITCH_LITE_SC7
++	if (tegra_chipid_is_t210_b01()) {
++		cpu_c7_suspended[read_mpidr() & MPIDR_CPU_MASK] = 0U;
++		flush_dcache_range((uintptr_t)cpu_c7_suspended,
++				   sizeof(cpu_c7_suspended));
++	}
++#endif
+ 	tegra_fc_cpu_off(read_mpidr() & MPIDR_CPU_MASK);
+ 	return PSCI_E_SUCCESS;
+ }
+diff --git a/plat/nvidia/tegra/soc/t210/platform_t210.mk b/plat/nvidia/tegra/soc/t210/platform_t210.mk
+index fe31820ca..fafe61667 100644
+--- a/plat/nvidia/tegra/soc/t210/platform_t210.mk
++++ b/plat/nvidia/tegra/soc/t210/platform_t210.mk
+@@ -5,6 +5,13 @@
+ # SPDX-License-Identifier: BSD-3-Clause
+ #
+ 
++# Opt-in SC7 preparation and GIC/SMP context recovery for Windows CPU_SUSPEND.
++SWITCH_LITE_SC7 ?= 0
++$(eval $(call add_define,SWITCH_LITE_SC7))
++ifeq (${SWITCH_LITE_SC7},1)
++BL31_SOURCES += ${SOC_DIR}/t214/sc7.c
++endif
++
+ SWITCH_LITE_POWER_TRACE ?= 0
+ $(eval $(call add_define,SWITCH_LITE_POWER_TRACE))
+ ifeq (${SWITCH_LITE_POWER_TRACE},1)
+diff --git a/plat/nvidia/tegra/soc/t210/t214/sc7.c b/plat/nvidia/tegra/soc/t210/t214/sc7.c
+new file mode 100644
+index 000000000..87f9f88cc
+--- /dev/null
++++ b/plat/nvidia/tegra/soc/t210/t214/sc7.c
+@@ -0,0 +1,341 @@
++/*
++ * SPDX-License-Identifier: GPL-2.0-only
++ * SC7 preparation and GICv2 non-secure context recovery adapted from
++ * Switchroot L4T's pm-tegra210.c and pmc.c (commit 2d0059fd3167).
++ * Copyright (c) 2009-2019, NVIDIA CORPORATION. All rights reserved.
++ * Copyright (c) 2021-2023, CTCaer.
++ * Copyright (c) 2026, ruje0504-2.
++ *
++ * The B01 board routes MAX77620 pwr_int_n to PMC wake event 51, active low,
++ * and GIC SPI 86 (INTID 118, PMU_EXT) via PMC interrupt inversion. GIC PMU_EXT
++ * alone cannot wake a power-gated SoC, and PMC wake 51 cannot fire unless the
++ * Windows power-button driver has unmasked MAX77620 ONOFFIRQ and enabled GIC
++ * INTID 118. Also snapshot/restore non-secure GICv2 Group 1 distributor and
++ * banked per-CPU state across C7/CC6/SC7 because Windows Modern Standby enters
++ * via PSCI CPU_SUSPEND rather than Linux S3 syscore callbacks.
++ */
++#include <stdbool.h>
++#include <stdint.h>
++#include <arch_helpers.h>
++#include <bpmp.h>
++#include <drivers/delay_timer.h>
++#include <lib/mmio.h>
++#include <lib/psci/psci.h>
++#include <pmc.h>
++#include <tegra_def.h>
++
++#define LITE_PMC_SW_WAKE_STATUS		0x018U
++#define LITE_PMC_COREPWRGOOD_TIMER	0x03cU
++#define LITE_PMC_CPUPWRGOOD_TIMER	0x0c8U
++#define LITE_PMC_CPUPWROFF_TIMER	0x0ccU
++#define LITE_PMC_COREPWROFF_TIMER	0x0e0U
++#define LITE_PMC_WAKE2_MASK		0x160U
++#define LITE_PMC_WAKE2_LEVEL		0x164U
++#define LITE_PMC_WAKE2_STATUS		0x168U
++#define LITE_PMC_SW_WAKE2_STATUS	0x16cU
++
++#define LITE_PMC_LATCH_WAKEUPS		(1U << 5)
++#define LITE_PMC_PWRREQ_POL		(1U << 8)
++#define LITE_PMC_PWRREQ_OE		(1U << 9)
++#define LITE_PMC_SYSCLK_POL		(1U << 10)
++#define LITE_PMC_SYSCLK_OE		(1U << 11)
++#define LITE_PMC_SIDE_EFFECT_LP0	(1U << 14)
++#define LITE_PMC_CPU_PWRREQ_POL		(1U << 15)
++#define LITE_PMC_CPU_PWRREQ_OE		(1U << 16)
++#define LITE_PMC_INTR_POLARITY		(1U << 17)
++#define LITE_PMC_PMIC_WAKE		(1U << (51 - 32))
++
++/* Switchroot B01 NX DT core power good/off timers (13100/7800 us, 44160 us). */
++#define LITE_CORE_PWRGOOD_VAL		0x6c00U
++#define LITE_CORE_PWROFF_VAL		0x05a8U
++
++#define LITE_GICD_BASE			0x50041000U
++#define LITE_GICC_BASE			0x50042000U
++#define LITE_SYSCTR0_CNTCR		0x7000f000U
++#define LITE_GIC_PMU_EXT_INTID		118U
++#define LITE_GIC_MAX_WORDS		8U
++#define LITE_GIC_CTLR_GRP1		(1U << 1)
++#define LITE_GICC_EOI_MODE_NS		(1U << 10)
++
++struct lite_gic_pcpu {
++	uint32_t igroupr0;
++	uint32_t isenabler0;
++	uint32_t ipriorityr[8];
++	uint32_t gicc_ctlr;
++	uint32_t gicc_pmr;
++	uint32_t gicc_abpr;
++	bool valid;
++};
++
++static struct lite_gic_pcpu gic_pcpu[4];
++
++static struct {
++	uint32_t words;
++	uint32_t gicd_ctlr;
++	uint32_t pmc_cntrl;
++	uint32_t igroupr[LITE_GIC_MAX_WORDS];
++	uint32_t isenabler[LITE_GIC_MAX_WORDS];
++	uint32_t icfgr[LITE_GIC_MAX_WORDS * 2U];
++	uint32_t ipriorityr[LITE_GIC_MAX_WORDS * 8U];
++	uint32_t itargetsr[LITE_GIC_MAX_WORDS * 8U];
++	bool valid;
++} gic_dist;
++static bool sc7_armed;
++
++void tegra_lite_sc7_cancel(void)
++{
++	const uint32_t request[] = { 0U, 0U };
++	uint32_t unused_response = 0U;
++
++	if (!sc7_armed)
++		return;
++	sc7_armed = false;
++	flush_dcache_range((uintptr_t)&sc7_armed, sizeof(sc7_armed));
++	(void)tegra_bpmp_send_receive_atomic(MRQ_ENABLE_SUSPEND, request,
++			(int)sizeof(request), &unused_response, 0);
++}
++
++int32_t tegra_lite_sc7_prepare(void)
++{
++	const uint32_t request[] = { TEGRA_PM_SC7, 0U };
++	uint32_t unused_response = 0U;
++	uint32_t control, mask, level;
++	uint32_t pmu_word = LITE_GIC_PMU_EXT_INTID / 32U;
++	uint32_t pmu_bit = 1U << (LITE_GIC_PMU_EXT_INTID % 32U);
++
++	sc7_armed = false;
++	/* Require both warmboot_mariko (SCRATCH1) and bpmpfw_b01 (SCRATCH39). */
++	if ((tegra_pmc_read_32(PMC_SCRATCH1) == 0U) ||
++	    (tegra_pmc_read_32(PMC_SCRATCH39) == 0U)) {
++		return PSCI_E_NOT_SUPPORTED;
++	}
++
++	/* Require non-secure PMU_EXT (GIC INTID 118) armed by SwitchPowerButton. */
++	if (((mmio_read_32(LITE_GICD_BASE + 0x100U + pmu_word * 4U) & pmu_bit) == 0U) ||
++	    ((mmio_read_32(LITE_GICD_BASE + 0x080U + pmu_word * 4U) & pmu_bit) == 0U)) {
++		return PSCI_E_DENIED;
++	}
++
++	if (tegra_bpmp_send_receive_atomic(MRQ_ENABLE_SUSPEND, request,
++			(int)sizeof(request), &unused_response, 0) != 0) {
++		return PSCI_E_DENIED;
++	}
++	sc7_armed = true;
++
++	/* Program B01 NX core/CPU power timers and request polarities. */
++	tegra_pmc_write_32(LITE_PMC_COREPWRGOOD_TIMER, LITE_CORE_PWRGOOD_VAL);
++	tegra_pmc_write_32(LITE_PMC_COREPWROFF_TIMER, LITE_CORE_PWROFF_VAL);
++	tegra_pmc_write_32(LITE_PMC_CPUPWRGOOD_TIMER, 0U);
++	tegra_pmc_write_32(LITE_PMC_CPUPWROFF_TIMER, 0U);
++
++	control = tegra_pmc_read_32(PMC_CONFIG);
++	control &= ~(LITE_PMC_PWRREQ_POL | LITE_PMC_SYSCLK_POL |
++		     LITE_PMC_SIDE_EFFECT_LP0 | LITE_PMC_CPU_PWRREQ_POL);
++	control |= LITE_PMC_PWRREQ_OE | LITE_PMC_SYSCLK_OE |
++		   LITE_PMC_CPU_PWRREQ_OE | LITE_PMC_INTR_POLARITY;
++	tegra_pmc_write_32(PMC_CONFIG, control);
++	if (tegra_pmc_read_32(PMC_CONFIG) != control) {
++		tegra_lite_sc7_cancel();
++		return PSCI_E_DENIED;
++	}
++
++	/* Latch wake-pad state using Switchroot's two 120-us settling periods. */
++	tegra_pmc_write_32(LITE_PMC_SW_WAKE_STATUS, 0U);
++	tegra_pmc_write_32(LITE_PMC_SW_WAKE2_STATUS, 0U);
++	tegra_pmc_write_32(PMC_CONFIG, control | LITE_PMC_LATCH_WAKEUPS);
++	udelay(120);
++	tegra_pmc_write_32(PMC_CONFIG, control & ~LITE_PMC_LATCH_WAKEUPS);
++	udelay(120);
++
++	mask = tegra_pmc_read_32(LITE_PMC_WAKE2_MASK);
++	level = tegra_pmc_read_32(LITE_PMC_WAKE2_LEVEL);
++	tegra_pmc_write_32(LITE_PMC_WAKE2_STATUS, LITE_PMC_PMIC_WAKE);
++	tegra_pmc_write_32(LITE_PMC_WAKE2_LEVEL, level & ~LITE_PMC_PMIC_WAKE);
++	tegra_pmc_write_32(LITE_PMC_WAKE2_MASK, mask | LITE_PMC_PMIC_WAKE);
++	if (((tegra_pmc_read_32(LITE_PMC_WAKE2_MASK) & LITE_PMC_PMIC_WAKE) == 0U) ||
++	    ((tegra_pmc_read_32(LITE_PMC_WAKE2_LEVEL) & LITE_PMC_PMIC_WAKE) != 0U)) {
++		tegra_lite_sc7_cancel();
++		return PSCI_E_DENIED;
++	}
++
++	flush_dcache_range((uintptr_t)&sc7_armed, sizeof(sc7_armed));
++	return PSCI_E_SUCCESS;
++}
++
++void tegra_lite_gic_pcpu_invalidate(unsigned int cpu)
++{
++	if (cpu < 4U) {
++		gic_pcpu[cpu].valid = false;
++		flush_dcache_range((uintptr_t)&gic_pcpu[cpu], sizeof(gic_pcpu[cpu]));
++	}
++}
++
++void tegra_lite_gic_pcpu_save(unsigned int cpu)
++{
++	struct lite_gic_pcpu *c;
++
++	if (cpu >= 4U) {
++		return;
++	}
++	c = &gic_pcpu[cpu];
++	c->valid = false;
++	c->igroupr0 = mmio_read_32(LITE_GICD_BASE + 0x080U);
++	c->isenabler0 = mmio_read_32(LITE_GICD_BASE + 0x100U);
++	for (unsigned int i = 0U; i < 8U; i++) {
++		c->ipriorityr[i] = mmio_read_32(LITE_GICD_BASE + 0x400U + i * 4U);
++	}
++	c->gicc_ctlr = mmio_read_32(LITE_GICC_BASE + 0x000U);
++	c->gicc_pmr = mmio_read_32(LITE_GICC_BASE + 0x004U);
++	c->gicc_abpr = mmio_read_32(LITE_GICC_BASE + 0x01cU);
++	c->valid = true;
++	flush_dcache_range((uintptr_t)c, sizeof(*c));
++}
++
++void tegra_lite_gic_pcpu_restore(unsigned int cpu)
++{
++	struct lite_gic_pcpu *c;
++	uint32_t ns, ctlr;
++
++	if ((cpu >= 4U) || !gic_pcpu[cpu].valid) {
++		return;
++	}
++	c = &gic_pcpu[cpu];
++	c->valid = false;
++	ns = c->igroupr0;
++
++	mmio_write_32(LITE_GICD_BASE + 0x080U,
++		      mmio_read_32(LITE_GICD_BASE + 0x080U) | ns);
++	for (unsigned int i = 0U; i < 8U; i++) {
++		uint32_t bmask = 0U;
++		for (unsigned int b = 0U; b < 4U; b++) {
++			if ((ns & (1U << (i * 4U + b))) != 0U) {
++				bmask |= 0xffU << (b * 8U);
++			}
++		}
++		if (bmask != 0U) {
++			uintptr_t reg = LITE_GICD_BASE + 0x400U + i * 4U;
++			mmio_write_32(reg, (mmio_read_32(reg) & ~bmask) |
++					   (c->ipriorityr[i] & bmask));
++		}
++	}
++	if ((ns & c->isenabler0) != 0U) {
++		mmio_write_32(LITE_GICD_BASE + 0x100U, ns & c->isenabler0);
++	}
++	mmio_write_32(LITE_GICC_BASE + 0x01cU, c->gicc_abpr);
++	mmio_write_32(LITE_GICC_BASE + 0x004U, c->gicc_pmr);
++	ctlr = mmio_read_32(LITE_GICC_BASE + 0x000U);
++	ctlr &= ~(LITE_GIC_CTLR_GRP1 | LITE_GICC_EOI_MODE_NS);
++	ctlr |= c->gicc_ctlr & (LITE_GIC_CTLR_GRP1 | LITE_GICC_EOI_MODE_NS);
++	mmio_write_32(LITE_GICC_BASE + 0x000U, ctlr);
++	dsbsy();
++	flush_dcache_range((uintptr_t)c, sizeof(*c));
++}
++
++void tegra_lite_gic_dist_save(void)
++{
++	uint32_t words = (mmio_read_32(LITE_GICD_BASE + 0x004U) & 0x1fU) + 1U;
++
++	if (words > LITE_GIC_MAX_WORDS) {
++		words = LITE_GIC_MAX_WORDS;
++	}
++	sc7_armed = false;
++	flush_dcache_range((uintptr_t)&sc7_armed, sizeof(sc7_armed));
++	gic_dist.valid = false;
++	gic_dist.words = words;
++	gic_dist.gicd_ctlr = mmio_read_32(LITE_GICD_BASE + 0x000U);
++	gic_dist.pmc_cntrl = tegra_pmc_read_32(PMC_CONFIG);
++	for (uint32_t w = 1U; w < words; w++) {
++		gic_dist.igroupr[w] = mmio_read_32(LITE_GICD_BASE + 0x080U + w * 4U);
++		gic_dist.isenabler[w] = mmio_read_32(LITE_GICD_BASE + 0x100U + w * 4U);
++		gic_dist.icfgr[w * 2U] =
++			mmio_read_32(LITE_GICD_BASE + 0xc00U + (w * 2U) * 4U);
++		gic_dist.icfgr[w * 2U + 1U] =
++			mmio_read_32(LITE_GICD_BASE + 0xc00U + (w * 2U + 1U) * 4U);
++		for (uint32_t sub = 0U; sub < 8U; sub++) {
++			uint32_t idx = w * 8U + sub;
++			gic_dist.ipriorityr[idx] =
++				mmio_read_32(LITE_GICD_BASE + 0x400U + idx * 4U);
++			gic_dist.itargetsr[idx] =
++				mmio_read_32(LITE_GICD_BASE + 0x800U + idx * 4U);
++		}
++	}
++	gic_dist.valid = true;
++	flush_dcache_range((uintptr_t)&gic_dist, sizeof(gic_dist));
++}
++
++void tegra_lite_gic_dist_restore(void)
++{
++	uint32_t ctlr, cntcr;
++
++	/* Re-enable system counter before returning to non-secure OS timers. */
++	cntcr = mmio_read_32(LITE_SYSCTR0_CNTCR);
++	mmio_write_32(LITE_SYSCTR0_CNTCR, cntcr | 0x3U);
++
++	if (!gic_dist.valid) {
++		return;
++	}
++	sc7_armed = false;
++	flush_dcache_range((uintptr_t)&sc7_armed, sizeof(sc7_armed));
++	gic_dist.valid = false;
++
++	/* Preserve PMIC active-low -> GIC high inversion before unmasking SPI 86. */
++	if ((gic_dist.pmc_cntrl & LITE_PMC_INTR_POLARITY) != 0U) {
++		tegra_pmc_write_32(PMC_CONFIG,
++			tegra_pmc_read_32(PMC_CONFIG) | LITE_PMC_INTR_POLARITY);
++	}
++
++	ctlr = mmio_read_32(LITE_GICD_BASE + 0x000U);
++	mmio_write_32(LITE_GICD_BASE + 0x000U, ctlr & ~LITE_GIC_CTLR_GRP1);
++
++	for (uint32_t w = 1U; w < gic_dist.words; w++) {
++		uint32_t sec_grp0 = ~mmio_read_32(LITE_GICD_BASE + 0x080U + w * 4U);
++		uint32_t ns = gic_dist.igroupr[w] & ~sec_grp0;
++
++		mmio_write_32(LITE_GICD_BASE + 0x080U + w * 4U,
++			      mmio_read_32(LITE_GICD_BASE + 0x080U + w * 4U) | ns);
++
++		for (uint32_t half = 0U; half < 2U; half++) {
++			uint32_t cmask = 0U;
++			for (uint32_t b = 0U; b < 16U; b++) {
++				if ((ns & (1U << (half * 16U + b))) != 0U) {
++					cmask |= 0x3U << (b * 2U);
++				}
++			}
++			if (cmask != 0U) {
++				uint32_t cidx = w * 2U + half;
++				uintptr_t reg = LITE_GICD_BASE + 0xc00U + cidx * 4U;
++				mmio_write_32(reg, (mmio_read_32(reg) & ~cmask) |
++						   (gic_dist.icfgr[cidx] & cmask));
++			}
++		}
++
++		for (uint32_t sub = 0U; sub < 8U; sub++) {
++			uint32_t bmask = 0U;
++			for (uint32_t b = 0U; b < 4U; b++) {
++				if ((ns & (1U << (sub * 4U + b))) != 0U) {
++					bmask |= 0xffU << (b * 8U);
++				}
++			}
++			if (bmask != 0U) {
++				uint32_t idx = w * 8U + sub;
++				uintptr_t preg = LITE_GICD_BASE + 0x400U + idx * 4U;
++				uintptr_t treg = LITE_GICD_BASE + 0x800U + idx * 4U;
++				mmio_write_32(preg, (mmio_read_32(preg) & ~bmask) |
++						    (gic_dist.ipriorityr[idx] & bmask));
++				mmio_write_32(treg, (mmio_read_32(treg) & ~bmask) |
++						    (gic_dist.itargetsr[idx] & bmask));
++			}
++		}
++
++		if ((ns & gic_dist.isenabler[w]) != 0U) {
++			mmio_write_32(LITE_GICD_BASE + 0x100U + w * 4U,
++				      ns & gic_dist.isenabler[w]);
++		}
++	}
++
++	ctlr = mmio_read_32(LITE_GICD_BASE + 0x000U);
++	mmio_write_32(LITE_GICD_BASE + 0x000U,
++		      ctlr | (gic_dist.gicd_ctlr & LITE_GIC_CTLR_GRP1));
++	dsbsy();
++	flush_dcache_range((uintptr_t)&gic_dist, sizeof(gic_dist));
++}

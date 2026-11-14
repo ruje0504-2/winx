@@ -1,8 +1,8 @@
 # T214 PSCI power and BL33 entry patches
 
-The build tool applies patches 0001 through 0006 to LineageOS ATF revision `85081cab2050051ea6e93206ef0f80bc0676e613`. It adapts Switchroot B01 restart preparation and MAX77620 shutdown in the shared T210 platform, gated by the T210B01 chip check and `SWITCH_LITE_PMIC_RESET=1`. Only the SoC-specific helper is under `soc/t210/t214`.
+The build tool applies patches 0001 through 0009 to LineageOS ATF revision `85081cab2050051ea6e93206ef0f80bc0676e613`. It adapts Switchroot B01 restart preparation and MAX77620 shutdown in the shared T210 platform, gated by the T210B01 chip check and `SWITCH_LITE_PMIC_RESET=1`, and optionally enables T210B01 SC7 preparation and context restoration (`0007`–`0009`) when built with `--sc7` (`SWITCH_LITE_SC7=1`). Only the SoC-specific helpers live under `soc/t210/t214`.
 
-The experimental sleep/context patches are isolated on [`sc7-test`](https://github.com/ruje0504-2/winx/tree/sc7-test). This branch applies the shutdown/restart patches and the BL33 entry correction below.
+The default build (`SWITCH_LITE_SC7=0`) leaves SC7 disabled and preserves the existing shutdown/restart and BL33 entry behavior. Passing `--sc7` enables BPMP `MRQ_ENABLE_SUSPEND`, warmboot/wake-51 preflight checks, GICv2 Group 1 and SMP secondary-core recovery (`0007`), CAR clock/PLL context (`0008`), and GPIO-output-first pinmux restoration (`0009`).
 
 ## Build
 
@@ -12,7 +12,11 @@ Use an AArch64 bare-metal GCC toolchain and GNU make. From the WinX source root:
 git clone --single-branch --branch lineage-22.2 https://github.com/LineageOS/android_hardware_nintendo_arm-trusted-firmware.git atf
 git -C atf checkout 85081cab2050051ea6e93206ef0f80bc0676e613
 python3 Tools/build-t214-atf.py atf out/t214-atf --cross-prefix aarch64-none-elf-
+python3 Tools/build-t214-atf.py atf out/t214-atf-sc7 --sc7 --cross-prefix aarch64-none-elf-
 python3 Tools/test-t214-pmic.py atf
+python3 Tools/test-t214-sc7.py atf
+python3 Tools/test-t214-clocks.py atf
+python3 Tools/test-t214-pads.py atf
 ```
 
 The build tool accepts the pinned checkout or its source archive, applies the patches (or recognizes them as already applied), and writes `out/t214-atf/bl31.bin`. It uses a separate build directory to avoid reusing objects from the rejected default-address build. SOURCE_DATE_EPOCH and the build string are fixed; use the same compiler for byte-identical output.
@@ -46,4 +50,4 @@ R6 uses Switchroot's GPIO-based PMIC transfer path during final power-off. With 
 
 The focused host test checks PMC timings, BootROM commands and checksums, the RTC selector and both hardware-I2C and GPIO PMIC failure paths. The ARM64 binary inspection confirms that native restart reaches PMC reset. Build and simulated results are separate from the physical shutdown and restart observations.
 
-The new helper is GPL-2.0-only, derived from Switchroot's PMC/PMIC power code and Hekate's I2C code; original copyright is retained in its source. The remaining ATF source retains its upstream notices.
+The SoC-specific helpers (`pmic_power.c`, `sc7.c`, `clocks.c`, `pads.c`) are GPL-2.0-only, derived from Switchroot's PMC/PMIC/CAR/pinctrl/GPIO code (`2d0059fd3167a8df756de2aa0489d4aa70a9fc15`) and Hekate's I2C code; original copyrights are retained in their sources. Consequently, `bl31.bin` binaries built with `SWITCH_LITE_PMIC_RESET=1` or `SWITCH_LITE_SC7=1` carry GPL-2.0-only obligations. The remaining ATF source retains its upstream BSD-3-Clause notices.
