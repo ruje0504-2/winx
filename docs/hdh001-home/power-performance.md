@@ -8,6 +8,34 @@ The tested combination was Windows 11 ARM64 23H2 (22631.2861), SwitchBattery **1
 
 The native PMC restart build passed with fan tracing disabled. On 2026-11-09, **BL31 r8** returned a remotely restarted Lite to Windows with Hekate autoboot disabled. The owner confirmed that Windows Restart goes directly to Windows and powering on after Shutdown opens Hekate. R8 remembers the entry Hekate used for the current boot and requests that entry on Restart.
 
+## Current frequency selection
+
+On November 13 the owner selected a lower-frequency GPU/EMC combination and
+kept CPU settings unchanged. The WinX configuration change is limited to
+`ram_oc=1600000` in `woa-lite-home-performance.ini`; the existing firmware
+already supports that request. `cpu_oc=1996800` remains the boot handoff
+request, while SwitchFan 13 continues to select 1497.6 MHz in Windows.
+
+| Component | Selected setting | Readback / status |
+|---|---|---|
+| CPU | 1497.6 MHz, existing voltage | 1497600 kHz / 1120 mV after restart |
+| RAM | 1600 MHz, existing voltage | Requested and actual 1600000 kHz; handoff Ready (1) |
+| GPU | 460.8 MHz, 800 mV fixed-profile floor | Hardware counter 460800 kHz; startup PMIC setting readback 800000 µV |
+| Fan | SwitchFan 1.0.0.13 | Version 13 retained |
+
+Previously RAM requested 2100 MHz but actually ran at 1866 MHz with
+RateMismatch (8). The new 1600 MHz result was read after the restart requested
+at 2026-11-14 03:10:27 UTC. The owner confirmed an operable Windows desktop
+while the GPU remained behind its startup gate. Native desktop stability and
+subsequent direct tgd3d cold boot are separate owner-run tests, still pending.
+The paired GPU package was then installed and enabled without another OS
+restart. At 03:16:00 UTC it reported Code 0 and DWM loaded tgd3d; this verifies
+installation and clock selection, not the pending physical stability tests.
+GPU code and detailed results remain in
+[mesa-switch-woa](https://github.com/ruje0504-2/mesa-switch-woa/blob/tgd3d-vulkan/tegra-x1-wddm/docs/TGD3D_POWER_SPEEDO_20261113.md).
+No battery, charging, SD, CPU voltage or sleep-policy code changes accompany
+this WinX configuration update.
+
 ## Current sleep/wake work
 
 On 2026-11-08, the owner confirmed that **switchpwrbtn 1.0.0.4** restores the display and normal input after repeated short power-button screen-off/wake cycles. Runtime counters recorded **12 Power Down reports and 12 Wake Up reports**; Windows recorded paired Modern Standby entry/exit events and SSH remained reachable after wake.
