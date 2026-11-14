@@ -31,6 +31,10 @@ subsequent direct tgd3d cold boot are separate owner-run tests, still pending.
 The paired GPU package was then installed and enabled without another OS
 restart. At 03:16:00 UTC it reported Code 0 and DWM loaded tgd3d; this verifies
 installation and clock selection, not the pending physical stability tests.
+At 03:24:35 UTC the owner requested direct native tgd3d boot again. The same
+GPU package was armed persistently and the logon activation task disabled;
+CPU, GPU and RAM readbacks were unchanged. No restart was requested by the
+controller, and the owner-run cold-boot result remains pending.
 GPU code and detailed results remain in
 [mesa-switch-woa](https://github.com/ruje0504-2/mesa-switch-woa/blob/tgd3d-vulkan/tegra-x1-wddm/docs/TGD3D_POWER_SPEEDO_20261113.md).
 No battery, charging, SD, CPU voltage or sleep-policy code changes accompany
