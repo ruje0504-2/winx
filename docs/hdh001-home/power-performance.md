@@ -27,14 +27,28 @@ Previously RAM requested 2100 MHz but actually ran at 1866 MHz with
 RateMismatch (8). The new 1600 MHz result was read after the restart requested
 at 2026-11-14 03:10:27 UTC. The owner confirmed an operable Windows desktop
 while the GPU remained behind its startup gate. Native desktop stability and
-subsequent direct tgd3d cold boot are separate owner-run tests, still pending.
+subsequent direct tgd3d cold boot are separate owner-run tests. The later
+direct cold boot still rebooted automatically and is recorded as failed.
 The paired GPU package was then installed and enabled without another OS
 restart. At 03:16:00 UTC it reported Code 0 and DWM loaded tgd3d; this verifies
 installation and clock selection, not the pending physical stability tests.
 At 03:24:35 UTC the owner requested direct native tgd3d boot again. The same
 GPU package was armed persistently and the logon activation task disabled;
 CPU, GPU and RAM readbacks were unchanged. No restart was requested by the
-controller, and the owner-run cold-boot result remains pending.
+controller. The owner subsequently reported another automatic reboot.
+The owner reports somewhat better weather/browser stability on external
+power than battery, with occasional reboots even while plugged in. There
+is no controlled equal-load/equal-duration AC/DC comparison or established
+root cause. Lowering GPU/EMC did not resolve direct native cold boot.
+
+The offline update restored the configuration for activation after interactive logon
+(PT5S task), preserving the clocks above. At the owner's additional request,
+the paired UMD enables the existing bidirectional GPU Fence with the
+reviewed Flush error-reporting fix; ARM64/x64 builds and x64 CPU controls
+pass. SD readback verified 74 files and the scoped registry changes;
+Windows logon activation and physical acceptance await the owner. KMD and ICD are unchanged.
+A CPU-sync logon recovery archive is retained. No new SSH test or agent
+delegation accompanies this operation; wait for the owner to arrange Claude.
 GPU code and detailed results remain in
 [mesa-switch-woa](https://github.com/ruje0504-2/mesa-switch-woa/blob/tgd3d-vulkan/tegra-x1-wddm/docs/TGD3D_POWER_SPEEDO_20261113.md).
 No battery, charging, SD, CPU voltage or sleep-policy code changes accompany
