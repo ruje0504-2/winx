@@ -868,7 +868,7 @@ int main(void) {
     run(sc7, PSCI_E_INVALID_PARAMS);
     assert(init_calls == 0);
 
-    /* Test GICv2 per-CPU + distributor save, sc7_armed persistence across GIC save, wipe, restore. */
+    /* Test GICv2 per-CPU + distributor save, armed-state persistence across GIC save, wipe, restore. */
     setup_valid_board();
     assert(tegra_lite_sc7_prepare() == PSCI_E_SUCCESS);
     for (unsigned c = 0; c < 4; c++) {
