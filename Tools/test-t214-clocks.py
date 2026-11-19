@@ -58,7 +58,7 @@ static void mmio_write_32(uintptr_t address,uint32_t value){
  /* Warmboot-owned DRAM/boot PLLs are outside this port's write authority. */
  assert(off!=0x090&&off!=0x098&&off!=0x09c&&off!=0x0a0&&off!=0x0ac);
  assert(off!=0x19c&&off!=0x5e8&&off!=0x5ec);
- if(off==0x0e0&&restoring&&(saved(0x020)==CCLK_POLICY_PLLX||saved(0x020)==CCLK_POLICY_CLKM)){
+ if(off==0x0e0&&restoring&&cclk_policy_is_open_loop(saved(0x020))){
   /* PLLX must never be disabled or reprogrammed while CCLK still selects PLLX! */
   assert(regs[0x020/4]==CCLK_POLICY_CLKM);
  }
@@ -84,7 +84,7 @@ static void mmio_write_32(uintptr_t address,uint32_t value){
 static void udelay(unsigned int delay){assert(delay<=20);elapsed+=delay;assert(elapsed<30000);}
 static void dsbsy(void){}
 static void flush_dcache_range(uintptr_t address,size_t size){
- assert(address==(uintptr_t)&context&&size==sizeof(context)&&context.valid);flushes++;
+ assert(address==(uintptr_t)&context&&size==sizeof(context));flushes++;
 }
 static void init(void){
  memset(regs,0,sizeof(regs));memset(&context,0,sizeof(context));
@@ -139,7 +139,7 @@ static void check(void){
  for(unsigned i=0;i<COUNT(scalars);i++){
   unsigned o=scalars[i];
   if(o==0x020||o==0x024){
-   if(original[0x020/4]==CCLK_POLICY_PLLX||original[0x020/4]==CCLK_POLICY_CLKM)
+   if(cclk_policy_is_open_loop(original[0x020/4]))
     assert(regs[o/4]==original[o/4]);
    continue;
   }
@@ -184,12 +184,47 @@ int main(void){
  init();tegra_lite_clocks_save();lose();regs[0x0a0/4]&=~PLL_LOCK;
  assert(tegra_lite_clocks_restore()==PSCI_E_INTERN_FAIL&&!bank_writes);
 
- /* Non-open-loop CCLK policy (e.g. DFLL) with conflicting live PLLX must fail safely! */
+ /* Preflight CCLK policy support: allow open-loop PLLX/CLKM variants, reject DFLL. */
+ init();assert(tegra_lite_clocks_cclk_supported());
+ regs[0x020/4]=CCLK_POLICY_CLKM;assert(tegra_lite_clocks_cclk_supported());
+ regs[0x0e0/4]&=~(PLL_ON|PLL_LOCK);assert(tegra_lite_clocks_cclk_supported());
+ regs[0x020/4]=CCLK_POLICY_PLLX;assert(!tegra_lite_clocks_cclk_supported());
+ regs[0x0e0/4]=original[0x0e0/4];
+ regs[0x020/4]=0x20008880U;assert(tegra_lite_clocks_cclk_supported());
+ regs[0x020/4]=0x30008888U;assert(tegra_lite_clocks_cclk_supported());
+ regs[0x020/4]=0x20009999U;assert(!tegra_lite_clocks_cclk_supported());
+ regs[0x020/4]=0x20008898U;assert(!tegra_lite_clocks_cclk_supported());
+ regs[0x020/4]=0x20018888U;assert(!tegra_lite_clocks_cclk_supported());
+
+ /* Mixed open-loop (PLLX+CLKM) and non-RUN CPU_STATE restore cleanly across boot PLLX. */
+ const uint32_t open_loop_cases[]={0x20008880U,0x30008888U};
+ for(unsigned i=0;i<COUNT(open_loop_cases);i++){
+  init();regs[0x020/4]=open_loop_cases[i];original[0x020/4]=open_loop_cases[i];
+  tegra_lite_clocks_save();lose();
+  regs[0x020/4]=CCLK_POLICY_PLLX;
+  regs[0x0e0/4]=(original[0x0e0/4]^0x100U)|PLL_ON|PLL_LOCK;
+  assert(tegra_lite_clocks_restore()==0);
+  check();
+ }
+
+ /* Snapshot invalidation prevents stale replay after an aborted SC7 suspend. */
+ init();tegra_lite_clocks_save();assert(context.valid);
+ tegra_lite_clocks_invalidate();assert(!context.valid);
+ lose();assert(tegra_lite_clocks_restore()==PSCI_E_DENIED&&!writes);
+
+ /* Non-open-loop CCLK policy (e.g. DFLL) fails closed even if PLLX was off or mismatched. */
+ init();regs[0x020/4]=0x20009999U;original[0x020/4]=0x20009999U;
+ regs[0x0e0/4]&=~(PLL_ON|PLL_LOCK);
+ tegra_lite_clocks_save();lose();regs[0x0e0/4]=PLL_ON|PLL_LOCK|0x6802U;
+ uint32_t boot_x=regs[0x0e0/4];
+ assert(tegra_lite_clocks_restore()==PSCI_E_INTERN_FAIL&&!bank_writes&&
+        !context.valid&&regs[0x0e0/4]==boot_x);
+
  init();regs[0x020/4]=0x2000ffffU;original[0x020/4]=0x2000ffffU;
  tegra_lite_clocks_save();lose();regs[0x0e0/4]=original[0x0e0/4]^0x100;
  uint32_t live_x=regs[0x0e0/4];
  assert(tegra_lite_clocks_restore()==PSCI_E_INTERN_FAIL&&!bank_writes&&regs[0x0e0/4]==live_x);
- puts("PASS: CAR/PLL repeated loss, open-loop PLLX relock, USB ref dependency, bounded failures and untouched DRAM clocks");
+ puts("PASS: CAR/PLL repeated loss, open-loop PLLX relock, DFLL fail-closed, snapshot invalidate, USB ref dependency, bounded failures and untouched DRAM clocks");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='lite-sc7-clocks-') as temporary:

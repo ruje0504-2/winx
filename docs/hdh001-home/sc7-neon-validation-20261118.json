@@ -1,0 +1,213 @@
+{
+  "scope": "Neon-authored SC7 candidate. Local verification only. This candidate was not installed on the Switch. Defaults remain opt-in.",
+  "source": {
+    "mesa": "4860563e0e2749065a319262bf9f70b228408c9d",
+    "WindowsDrivers": "606b12223c27f4e9976bc09246ab4e15df21fdce",
+    "WinX_base": "3499948c79c1c1750977d2cc893a477d1969f3d9",
+    "pinned_TFA": "85081cab2050051ea6e93206ef0f80bc0676e613",
+    "atf_patch_sha256": "deb6d6469a61127575cdb7981f86eb5d4677d9834a3cbe1a2dd8e1b8734cae9d"
+  },
+  "checks": {
+    "ARM64_WDK": [
+      "switchbattery.sys",
+      "switchbt.sys",
+      "switchfan.sys",
+      "switchpwrbtn.sys",
+      "switchrtc.sys",
+      "switchsio.sys",
+      "switchtouch.sys",
+      "tegra210gpio.sys",
+      "tegra210i2c.sys",
+      "tegra214pep.sys",
+      "tegragpurender.sys",
+      "tegraxusb.sys"
+    ],
+    "peripheral_host_suites": [
+      "Tegra214Power-tests-test-processor",
+      "Tegra214Power-tests-test-notifications",
+      "SwitchPowerButton-tests-test-wake",
+      "Tegra210Gpio-tests-test-context",
+      "Tegra210I2c-tests-test-context",
+      "SwitchRtc-tests-test-suspend",
+      "SwitchFan-tests-test-screenoff",
+      "TegraXusb-tests-test-sc7-start",
+      "common-tests-test-display-idle",
+      "SwitchBattery-tests-test-charge-policy",
+      "SwitchBattery-tests-test-irp-ownership",
+      "SwitchBluetooth-tests-test-cancel",
+      "Tegra210Sdhc-tests-test-t214-context",
+      "Tegra210Sdhc-tests-test-crashdump",
+      "SwitchFan-tests-test-dfll-control",
+      "SwitchFan-tests-test-dfll-tables",
+      "SwitchFan-tests-test-t214-clock",
+      "SwitchFan-tests-test-gpu-pmic-power",
+      "SwitchBattery-tests-test-charge-limit"
+    ],
+    "gpu_x64_WDK_Wine": [
+      {
+        "name": "hardware",
+        "returncode": 0,
+        "expected_failure": false
+      },
+      {
+        "name": "context",
+        "returncode": 0,
+        "expected_failure": false
+      },
+      {
+        "name": "worker",
+        "returncode": 0,
+        "expected_failure": false
+      },
+      {
+        "name": "dvfs",
+        "returncode": 0,
+        "expected_failure": false
+      },
+      {
+        "name": "dvfs-original",
+        "returncode": 78,
+        "expected_failure": true
+      }
+    ],
+    "firmware_host": [
+      "PSCI/BPMP/wake/GIC",
+      "CAR/CCLK",
+      "pinmux/pads"
+    ],
+    "firmware_builds": [
+      "AArch64 default and SC7 BL31 from the frozen upstream archive and full patch chain",
+      "AArch64 default and SC7 EDK2 in independent build trees"
+    ],
+    "default_BL31_byte_identical": true,
+    "DSDT": {
+      "default": {
+        "TEGRA210_EFI.fd": "6ee1fab4c67c9f4c27aa8e56022ed8de7ded36ee574427c86a630de6126643e7",
+        "bl33.bin": "5d96d7d44b81cf97755df728320ad7fbf42cc29a177af22a0e09cd1a1732ffe0",
+        "Dsdt.aml": "7b2da174f56fc8158d1c09dee352a751c8f4ca201037226dd23e589a771ca591"
+      },
+      "sc7": {
+        "TEGRA210_EFI.fd": "868df8bc6eb4449a22f0d827e09f602dbc1fa3dfa86a5daff62a8df000ee17c8",
+        "bl33.bin": "19428bebf2f6fbf2731919cee45c38c67c53c65d691d2b2fc6603ad895e5435d",
+        "Dsdt.aml": "950d9a6c81f8ed0faa2b9d1e3d5e534445284299ddedb6e61804835275c9e74d"
+      },
+      "stock_dsdt_matches_before_sc7": true
+    },
+    "package_mock": {
+      "passed": 15,
+      "failed": 0,
+      "powershell": "7.7.0",
+      "syntax_checked_scripts": 5
+    },
+    "BPMP_acknowledgement": {
+      "before": {
+        "exit": 1,
+        "result": "SUMMARY: 2/18 checks passed, 16 failed",
+        "runtime_failure_examples": [
+          "FAIL clean_cancel_rollback: FAIL [test_clean_cancel_rollback:483]: COREPWRGOOD not restored: 0x6c00",
+          "FAIL disable_timeout_unanswered_mailbox: FAIL [test_disable_timeout_unanswered_mailbox:544]: timer not restored on timeout",
+          "FAIL disable_error_retry_cancel: FAIL [test_disable_error_retry_cancel:624]: PMC not restored"
+        ]
+      },
+      "after": {
+        "exit": 0,
+        "result": "SUMMARY: 18/18 checks passed, 0 failed",
+        "runtime_failure_examples": []
+      },
+      "source_sha256": "0ae967877f19fd304ad168c51380ccd488ea677a8eb06a33db2c9176fd6134cc",
+      "host_test_sha256": "0cc703988545b2e0305783ea27f139415ed2d5506153bf63faeb89a276846548"
+    }
+  },
+  "hardware_pending": [
+    "Real deep sleep entry and physical power draw",
+    "BPMP firmware, warmboot image compatibility and carveout retention",
+    "Power button wake and repeated D0/display/SD/GPU/USB recovery",
+    "Live Windows PnP bind, reboot and rollback of the SC7 online package"
+  ],
+  "artifacts": {
+    "switchbattery.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 40960,
+      "sha256": "c507ac008750c5faecc05070ae8919e9003f387569315d52a19e06f83331e232"
+    },
+    "switchbt.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 45568,
+      "sha256": "419948790ebe698c005ac258ed24ad07d4bab74e8a8e5876d1ed4dfc04eab6d5"
+    },
+    "switchfan.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 50688,
+      "sha256": "d60f99ddffd92fd307eeddc5ed8e45c8aa1758463bb561446f4fa3df63c84a1f"
+    },
+    "switchpwrbtn.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 39424,
+      "sha256": "779154c043ce6896a9218264a1847cf35ccd81be3dc682aa04d8c8e6448b0496"
+    },
+    "switchrtc.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 22528,
+      "sha256": "217cc6f1b887c4de3865e99f9aeaafe16a9ac164f04be42fe2e0c4fe7e5c326d"
+    },
+    "switchsio.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 34304,
+      "sha256": "7b1ca535b9f03e07f144989f194d8c5b473d4404c26853dda79d0539db346dc1"
+    },
+    "switchtouch.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 34304,
+      "sha256": "2b92210c7d4b80ff1b63679fbf4f707175ae19c3645959e863ae384064de115f"
+    },
+    "tegra210gpio.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 20992,
+      "sha256": "87f78b759bb63592df150eaf52380f3dad465c4e7d12238a85be6568abe673e1"
+    },
+    "tegra210i2c.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 22528,
+      "sha256": "70e50b61f4e5518fdcae56b6a4016fbf084281787ef0974198bdf890c3b835c4"
+    },
+    "tegra214pep.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 27136,
+      "sha256": "fafbe091535f433c4ecd4ddaa0f165b5e40503f9a2fc72c964d03dee252993c5"
+    },
+    "tegraxusb.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 10752,
+      "sha256": "2cfa7d9a71aec2bac009cc86ecbac86b44179f40907e19a0748ab20bbacad46a"
+    },
+    "tegragpurender.sys": {
+      "target": "ARM64",
+      "unsigned_bytes": 200704,
+      "sha256": "b2ef578abf4930a44a9b96762f5fcf4a4bec4538fce90d52472c04ff96c52a72"
+    },
+    "default/bl31.bin": {
+      "bytes": 49755,
+      "sha256": "e9a7997a3f1e3e70b02443ed375c3063cf3caac11947b8315466879afa499fb1"
+    },
+    "default/bl33.bin": {
+      "bytes": 921600,
+      "sha256": "5d96d7d44b81cf97755df728320ad7fbf42cc29a177af22a0e09cd1a1732ffe0"
+    },
+    "default/TEGRA210_EFI.fd": {
+      "bytes": 917504,
+      "sha256": "6ee1fab4c67c9f4c27aa8e56022ed8de7ded36ee574427c86a630de6126643e7"
+    },
+    "sc7/bl31.bin": {
+      "bytes": 62043,
+      "sha256": "33141cf4a47fe61ee8220a8457f11acfe23e97bacf920ef9c158415c64c8f4fc"
+    },
+    "sc7/bl33.bin": {
+      "bytes": 921600,
+      "sha256": "19428bebf2f6fbf2731919cee45c38c67c53c65d691d2b2fc6603ad895e5435d"
+    },
+    "sc7/TEGRA210_EFI.fd": {
+      "bytes": 917504,
+      "sha256": "868df8bc6eb4449a22f0d827e09f602dbc1fa3dfa86a5daff62a8df000ee17c8"
+    }
+  }
+}
